@@ -113,7 +113,7 @@ target("lsm_shared")
               "src/redis_wrapper/*.cpp")
     add_packages("toml11", "spdlog")
     add_includedirs("include", {public = true})  -- 确保包含路径正确
-    set_targetdir("$(buildir)/lib")
+    set_targetdir("$(builddir)/lib")
 
     if is_plat("windows") then
         set_extension(".dll")

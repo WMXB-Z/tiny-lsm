@@ -3,11 +3,8 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <fstream>
-#include <iostream>
 #include <vector>
 
-#include "spdlog/spdlog.h"
 
 namespace tiny_lsm {
 // 从零开始的初始化流程
@@ -46,8 +43,13 @@ WAL::WAL(const std::string& log_dir, size_t buffer_size,
     // 打开最大序号的wal，没有则新建wal.0
     active_log_path_ = log_dir + "/wal." + std::to_string(max_tag);
 
-    // !这里使用截断的方式似乎不太合理
+    // // !这里使用截断的方式似乎不太合理
     log_file_ = FileObj::open(active_log_path_, true);
+    // if(std::filesystem::exists(active_log_path_)){
+    //     log_file_ = FileObj::open(active_log_path_,false);
+    // }else{
+    //     log_file_ = FileObj::open(active_log_path_,true);
+    // }
     if (log_file_.size() > file_size_limit_) {
         reset_file();  // 创建 wal.(max_tag+1)
     }

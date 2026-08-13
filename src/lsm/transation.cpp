@@ -1,19 +1,15 @@
 #include "lsm/transaction.h"
 
-#include <algorithm>
 #include <cerrno>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
-#include <iostream>
 #include <mutex>
-#include <thread>
 #include <vector>
 
 #include "lsm/engine.h"
 #include "spdlog/spdlog.h"
 #include "utils/files.h"
-#include "utils/set_operation.h"
 
 namespace tiny_lsm {
 
@@ -219,7 +215,10 @@ bool TranContext::commit(bool test_fail) {
         if (!test_fail) {
             // 这里是手动调用 memtable 的无锁版本的 put_, 因为之前手动加了写锁
             for (auto& [k, v] : temp_map_) {
-                memtable.put_(k, v, tranc_id_);
+                // memtable 必须与 WAL 使用相同的 committed_seq，
+                // 否则刷盘后的 max_flushed_seq 无法覆盖 WAL 中已提交的事务，
+                // 导致重启恢复时把已落盘数据全部重放一遍。
+                memtable.put_(k, v, committed_seq);
             }
         }
     }
@@ -316,7 +315,11 @@ void TranManager::update_max_flushed_seq(uint64_t tranc_id){
     uint64_t cur = max_flushed_seq_.load();
     // cur 会被更新成最新值
     while (cur < tranc_id && !max_flushed_seq_.compare_exchange_weak(cur, tranc_id)) {}
-    wal->reset_max_flushed_seq(max_flushed_seq_.load());
+    // 恢复 WAL 阶段 wal 尚未初始化，此时只需要更新内存中的 max_flushed_seq_，
+    // 后续 init_new_wal() 会用该值创建新的 WAL。
+    if (wal) {
+        wal->reset_max_flushed_seq(max_flushed_seq_.load());
+    }
 }
 
 // 待flush的事务id数组中增加一个元素

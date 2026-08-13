@@ -141,10 +141,14 @@ public:
     // 这里不对 tranc_id 进行检查，由上层保证 tranc_id 的合法性
     void put(const std::string& key, const std::string& value, uint64_t tranc_id);
 
-    // 查找键对应的值
-    // 事务 id 为0 表示没有开启事务
-    // 否则只能查找事务 id 小于等于 tranc_id 的值
-    // 返回值: 如果找到，返回 value 和 tranc_id，否则返回空
+
+    /**
+     * @brief 查找键对应的值
+     * 
+     * @param key 
+     * @param tranc_id: 事务的id，若为0则表示没有开启事务
+     * @return 如果找到，返回可以访问 value 和 tranc_id的迭代器SkipListIterator，否则返回空迭代器
+     */
     SkipListIterator get(const std::string& key, uint64_t tranc_id);
 
     // !!! 这里的 remove 是跳表本身真实的 remove,  lsm 应该使用 put 空值表示删除

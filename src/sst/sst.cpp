@@ -239,8 +239,7 @@ std::string SST::resolve_value(const std::string& raw_value) const {
         return raw_value;
     }
     // 判断是否是小value，是的话，就直接返回即可
-    // 因为这里设计的是：指针大小(8B)+偏移量(4B)，如果连12字节都没有，则说明它一定是小字节 
-    // !但这样设计并不合理，因为 raw_value 同样可能满足长度条件。
+    // 因为这里设计的是：指针大小(8B)+偏移量(4B)，如果连12字节都没有，则说明它是小字节 
     if (raw_value.size() < 12) {    
         return raw_value;
     }
@@ -252,6 +251,7 @@ std::string SST::resolve_value(const std::string& raw_value) const {
         throw std::runtime_error(
             "SST::resolve_value: vlog is null for WiscKey SST");
     }
+    // 大字节value会通过vlog_实现访问
     return vlog_->read_value(off, sz);
 }
 
@@ -351,10 +351,11 @@ void SSTBuilder::add(const std::string& key, const std::string& value, uint64_t 
     const std::string *actual_value = &value;
     std::string vlog_ref;
 
-    // 判断是否启用 WiscKey + 是否是大 value
+    // !判断是否启用 WiscKey + 是否是大 value，如果是大字节value，
+    // 则会将实际的value追加至vlog_文件中，sst文件中仅保留它在vlog中的偏移地址(8B)和字节大小(4B)
     if (storage_mode_ == 1 && vlog_ && !value.empty() 
         && wisckey_threshold_ > 0 
-        && value.size() > wisckey_threshold_) {
+        && value.size() >= wisckey_threshold_) {
         uint64_t offset = vlog_->append(key, value);
         vlog_ref.resize(sizeof(uint64_t) + sizeof(uint32_t));
         uint32_t val_size = static_cast<uint32_t>(value.size());

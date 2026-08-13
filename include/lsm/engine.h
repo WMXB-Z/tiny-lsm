@@ -8,7 +8,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "compact.h"
 #include "memtable/memtable.h"
 #include "sst/sst.h"
 #include "transaction.h"
