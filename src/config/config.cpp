@@ -206,14 +206,14 @@ const TomlConfig &TomlConfig::getInstance(const std::string &config_path) {
     } else {
       std::cerr << "Config file not found or unreadable: " << config_path
                 << ", using default configuration" << std::endl;
-      return "config.toml"; // 使用空路径初始化默认配置
+      return ""; // 使用空路径初始化默认配置
     }
   }());
   return instance;
 }
 
 TomlConfig::~TomlConfig() {
-  // 如果配置文件不存在，则持久化当前配置
+  // 如果配置文件路径存在但文件不存在，则将当前的内存配置保存为指定路径下的配置文件
   if (!config_file_path_.empty()) {
     std::ifstream file(config_file_path_);
     if (!file.good()) {
