@@ -36,7 +36,8 @@ private:
     std::vector<uint8_t> data;  //存放从块中读出的data段数据（即一组k-y Entyr实例）
     std::vector<uint16_t> offsets;  //存放从块中读出的offsets段数据（即每个k-v实例的偏移量）
     size_t capacity;    //存放从块中读出的k-v实例的数量
-
+    
+private:
     struct Entry {
         std::string key;
         std::string value;
@@ -56,16 +57,14 @@ private:
 public:
     Block() = default;
     Block(size_t capacity);
-    // ! 这里的编码函数不包括 hash
+    // 这里的编码函数可指定切片是否包括 hash
     std::vector<uint8_t> encode(bool with_hash = true);
-    // ! 这里的解码函数可指定切片是否包括 hash
+    // 这里的解码函数可指定切片是否包括 hash
     static std::shared_ptr<Block> decode(const std::vector<uint8_t>& encoded, bool with_hash = true);
     std::string get_first_key();
     size_t get_offset_at(size_t idx) const;
-    bool add_entry(const std::string& key, const std::string& value,
-                   uint64_t tranc_id, bool force_write);
-    std::optional<std::string> get_value_binary(const std::string& key,
-                                                uint64_t tranc_id);
+    bool add_entry(const std::string& key, const std::string& value,uint64_t tranc_id, bool force_write);
+    std::optional<std::string> get_value_binary(const std::string& key,uint64_t tranc_id);
 
     size_t size() const;
     size_t cur_size() const;
@@ -78,8 +77,7 @@ public:
 
     BlockIterator begin(uint64_t tranc_id = 0);
 
-    std::optional<std::pair<std::shared_ptr<BlockIterator>,
-                            std::shared_ptr<BlockIterator>>>
+    std::optional<std::pair<std::shared_ptr<BlockIterator>,std::shared_ptr<BlockIterator>>>
     iters_preffix(uint64_t tranc_id, const std::string& preffix);
 
     BlockIterator end();

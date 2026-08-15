@@ -76,22 +76,57 @@ public:
     //       lock(std::make_shared<std::shared_lock<std::shared_mutex>>(mutex))
     //       {}
 
-    // 构造函数
     SkipListIterator(std::shared_ptr<SkipListNode> node) : current(node) {}
-
-    // 空迭代器构造函数
     SkipListIterator() : current(nullptr), lock(nullptr) {}
 
+    /**
+     * @brief 重载++操作，实现迭代器后移
+     */
     virtual BaseIterator& operator++() override;
+
+    /**
+     * @brief 判断两个迭代器是相等
+     */
     virtual bool operator==(const BaseIterator& other) const override;
     virtual bool operator!=(const BaseIterator& other) const override;
+    
+    /**
+     * @brief 重载*操作
+     * @return 所指向节点的key, value_
+     */
     virtual value_type operator*() const override;
-    virtual IteratorType get_type() const override;
-    virtual bool is_end() const override;
-    virtual bool is_valid() const override;
-    std::string get_key() const;
-    std::string get_value() const;
-    uint64_t get_tranc_id() const override;
+
+    /**
+     * @brief 返回本迭代器的类型
+     */
+    virtual IteratorType get_type() const override{return IteratorType::SkipListIterator;};
+
+    /**
+     * @brief 判断迭代器是否在有效范围
+     */
+    virtual bool is_end() const override { return current == nullptr; };
+
+    /**
+     * @brief 判断迭代器指向的key是否还存活,若该key对应的value为空，则说明已经被删除了，需要返回false
+     */
+    virtual bool is_valid() const override{
+        return current && !current->key_.empty();
+    };
+
+    /**
+     * @brief 返回 key 
+     */
+    std::string get_key() const{ return current->key_; };
+
+    /**
+     * @brief 返回value
+     */
+    std::string get_value() const{ return current->value_; };
+
+    /**
+     * @brief 返回事务id
+     */
+    uint64_t get_tranc_id() const override{ return current->tranc_id_; };
 
 private:
     std::shared_ptr<SkipListNode> current;  //迭代器当前指向的节点
@@ -144,7 +179,6 @@ public:
 
     /**
      * @brief 查找键对应的值
-     * 
      * @param key 
      * @param tranc_id: 事务的id，若为0则表示没有开启事务
      * @return 如果找到，返回可以访问 value 和 tranc_id的迭代器SkipListIterator，否则返回空迭代器

@@ -1,274 +1,106 @@
 #include "utils/std_file.h"
-#include "spdlog/spdlog.h"
-#include <cerrno>
-#include <cstdio>
-#include <cstring>
+
+#include <fstream>
 #include <iostream>
-#include <stdexcept>
+
+#include "spdlog/spdlog.h"
 
 #ifdef _WIN32
+#include <io.h>
 #include <windows.h>
+
 #else
-#include <fcntl.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
 namespace tiny_lsm {
 
-#ifdef _WIN32
-// Windows 实现：CreateFile + ReadFile/WriteFile + OVERLAPPED（位置读写）。
-// OVERLAPPED 显式携带偏移，不更新文件指针，同一句柄上并发调用安全，
-// 语义与 POSIX 的 pread/pwrite 对齐。open 时带 FILE_SHARE_DELETE，
-// 允许在句柄仍打开时删除文件（对应 POSIX 的 unlink）。
+bool StdFile::open(const std::string& filename, bool create) {
+    filename_ = filename;
+    // 以允许读，允许写，二进制模式打开文件
+    if (create) {
+        // std::ios::trunc表示打开文件时，不存在则创建，存在则直接清空内容（截断为 0 字节）
+        file_.open(filename, std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
+    } else {
+        file_.open(filename, std::ios::in | std::ios::out | std::ios::binary);
+    }
 
-namespace {
-constexpr void *kInvalidHandle = reinterpret_cast<void *>(static_cast<intptr_t>(-1));
+    if (!file_.is_open()) {
+        // 获取具体的错误信息
+        int err = errno;
+        std::string error_msg = fmt::format("Failed to open file '{}': {} ({})",
+                                            filename, strerror(err), err);
+
+        // 同时输出到日志文件和标准错误
+        spdlog::error(error_msg);
+        std::cerr << "[ERROR] " << error_msg << std::endl;
+
+        return false;
+    }
+
+    return true;
 }
 
-bool StdFile::open(const std::string &filename, bool create) {
-  filename_ = filename;
+bool StdFile::create(const std::string& filename, std::vector<uint8_t>& buf) {
+    if (!this->open(filename, true)) {
+        throw std::runtime_error("Failed to open file for writing");
+    }
+    if (!buf.empty()) {
+        write(0, buf.data(), buf.size());
+    }
 
-  HANDLE h = CreateFileA(
-      filename.c_str(), GENERIC_READ | GENERIC_WRITE,
-      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
-      create ? CREATE_ALWAYS : OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-
-  if (h == INVALID_HANDLE_VALUE) {
-    DWORD err = GetLastError();
-    std::string error_msg =
-        fmt::format("Failed to open file '{}': error code {}", filename, err);
-
-    spdlog::error(error_msg);
-    std::cerr << "[ERROR] " << error_msg << std::endl;
-    return false;
-  }
-
-  handle_ = h;
-  return true;
-}
-
-bool StdFile::create(const std::string &filename, std::vector<uint8_t> &buf) {
-  if (!this->open(filename, true)) {
-    throw std::runtime_error("Failed to open file for writing");
-  }
-  if (!buf.empty()) {
-    write(0, buf.data(), buf.size());
-  }
-
-  return true;
+    return true;
 }
 
 void StdFile::close() {
-  if (is_open()) {
-    sync();
-    CloseHandle(static_cast<HANDLE>(handle_));
-    handle_ = kInvalidHandle;
-  }
+    if (file_.is_open()) {
+        sync();
+        file_.close();
+    }
 }
 
 size_t StdFile::size() {
-  if (!is_open()) {
-    return 0;
-  }
-  LARGE_INTEGER sz;
-  if (!GetFileSizeEx(static_cast<HANDLE>(handle_), &sz)) {
-    return 0;
-  }
-  return static_cast<size_t>(sz.QuadPart);
+    file_.seekg(0, std::ios::end);
+    return file_.tellg();
 }
 
 std::vector<uint8_t> StdFile::read(size_t offset, size_t length) {
-  std::vector<uint8_t> buf(length);
-  size_t done = 0;
-  while (done < length) {
-    OVERLAPPED ov{};
-    ov.Offset = static_cast<DWORD>(offset + done);
-    ov.OffsetHigh = static_cast<DWORD>((offset + done) >> 32);
-    DWORD n = 0;
-    if (!ReadFile(static_cast<HANDLE>(handle_), buf.data() + done,
-                  static_cast<DWORD>(length - done), &n, &ov)) {
-      // EOF（ERROR_HANDLE_EOF）或其它错误统一按读取失败处理，保持原异常语义
-      throw std::runtime_error("Failed to read from file");
+    std::vector<uint8_t> buf(length);
+    file_.seekg(offset, std::ios::beg);
+    if (!file_.read(reinterpret_cast<char*>(buf.data()), length)) {
+        throw std::runtime_error("Failed to read from file");
     }
-    if (n == 0) {
-      throw std::runtime_error("Failed to read from file");
-    }
-    done += n;
-  }
-  return buf;
+    return buf;
 }
 
-bool StdFile::write(size_t offset, const void *data, size_t size) {
-  if (!is_open()) {
-    return false;
-  }
-  const uint8_t *ptr = static_cast<const uint8_t *>(data);
-  size_t done = 0;
-  while (done < size) {
-    OVERLAPPED ov{};
-    ov.Offset = static_cast<DWORD>(offset + done);
-    ov.OffsetHigh = static_cast<DWORD>((offset + done) >> 32);
-    DWORD n = 0;
-    if (!WriteFile(static_cast<HANDLE>(handle_), ptr + done,
-                   static_cast<DWORD>(size - done), &n, &ov)) {
-      return false;
-    }
-    if (n == 0) {
-      return false;
-    }
-    done += n;
-  }
-  return true;
+bool StdFile::write(size_t offset, const void* data, size_t size) {
+    // file_.seekg(offset, std::ios::beg);
+    file_.seekp(offset, std::ios::beg);
+    file_.write(static_cast<const char*>(data), size);
+    // this->sync();
+    return true;
 }
 
 bool StdFile::sync() {
-  if (!is_open()) {
-    return false;
-  }
-  return FlushFileBuffers(static_cast<HANDLE>(handle_)) != 0;
+    if (!file_.is_open()) {
+        return false;
+    }
+    file_.flush();
+    return file_.good();
 }
 
 bool StdFile::remove() {
-  // Windows 下用 DeleteFileW：open 时已带 FILE_SHARE_DELETE，可删除被打开的文件
-  return DeleteFileW(filename_.c_str()) != 0;
+    // 修复类型转换问题
+    return std::remove((const char*)filename_.c_str()) == 0;
 }
 
+// TODO: Windows下的文件截断实现目前有问题搁置
+#ifndef _WIN32
 bool StdFile::truncate(size_t size) {
-  if (!is_open()) {
-    return false;
-  }
-  LARGE_INTEGER pos;
-  pos.QuadPart = static_cast<LONGLONG>(size);
-  if (!SetFilePointerEx(static_cast<HANDLE>(handle_), pos, nullptr,
-                        FILE_BEGIN)) {
-    return false;
-  }
-  return SetEndOfFile(static_cast<HANDLE>(handle_)) != 0;
+    if (file_.is_open()) file_.close();
+    int ret = ::truncate(filename_.c_str(), size);
+    file_.open(filename_, std::ios::in | std::ios::out | std::ios::binary);
+    return ret == 0 && file_.is_open();
 }
-
-#else
-// POSIX 实现（Linux/macOS/BSD）：open + pread/pwrite + fstat。
-// pread/pwrite 每次调用显式携带偏移，不修改文件偏移状态，
-// 同一 fd 上多线程并发读写是安全的（修复 fstream 位置竞争）。
-
-bool StdFile::open(const std::string &filename, bool create) {
-  filename_ = filename;
-
-  int flags = O_RDWR;
-  if (create) {
-    flags |= O_CREAT | O_TRUNC;
-  }
-  fd_ = ::open(filename.c_str(), flags, 0644);
-
-  if (fd_ < 0) {
-    // 获取具体的错误信息
-    int err = errno;
-    std::string error_msg = fmt::format("Failed to open file '{}': {} ({})",
-                                        filename, strerror(err), err);
-
-    // 同时输出到日志文件和标准错误
-    spdlog::error(error_msg);
-    std::cerr << "[ERROR] " << error_msg << std::endl;
-
-    return false;
-  }
-
-  return true;
-}
-
-bool StdFile::create(const std::string &filename, std::vector<uint8_t> &buf) {
-  if (!this->open(filename, true)) {
-    throw std::runtime_error("Failed to open file for writing");
-  }
-  if (!buf.empty()) {
-    write(0, buf.data(), buf.size());
-  }
-
-  return true;
-}
-
-void StdFile::close() {
-  if (fd_ >= 0) {
-    sync();
-    ::close(fd_);
-    fd_ = -1;
-  }
-}
-
-size_t StdFile::size() {
-  if (fd_ < 0) {
-    return 0;
-  }
-  struct stat st;
-  if (::fstat(fd_, &st) != 0) {
-    return 0;
-  }
-  return static_cast<size_t>(st.st_size);
-}
-
-std::vector<uint8_t> StdFile::read(size_t offset, size_t length) {
-  std::vector<uint8_t> buf(length);
-  size_t done = 0;
-  while (done < length) {
-    ssize_t n = ::pread(fd_, buf.data() + done, length - done,
-                        static_cast<off_t>(offset + done));
-    if (n < 0) {
-      if (errno == EINTR) {
-        continue;
-      }
-      throw std::runtime_error("Failed to read from file");
-    }
-    if (n == 0) {
-      // EOF：实际读到的字节数不足，保持原 fstream 读不满即失败的语义
-      throw std::runtime_error("Failed to read from file");
-    }
-    done += static_cast<size_t>(n);
-  }
-  return buf;
-}
-
-bool StdFile::write(size_t offset, const void *data, size_t size) {
-  if (fd_ < 0) {
-    return false;
-  }
-  const uint8_t *ptr = static_cast<const uint8_t *>(data);
-  size_t done = 0;
-  while (done < size) {
-    ssize_t n = ::pwrite(fd_, ptr + done, size - done,
-                         static_cast<off_t>(offset + done));
-    if (n < 0) {
-      if (errno == EINTR) {
-        continue;
-      }
-      return false;
-    }
-    if (n == 0) {
-      return false;
-    }
-    done += static_cast<size_t>(n);
-  }
-  return true;
-}
-
-bool StdFile::sync() {
-  if (fd_ < 0) {
-    return false;
-  }
-  return ::fsync(fd_) == 0;
-}
-
-bool StdFile::remove() {
-  // 修复类型转换问题
-  return std::remove((const char *)filename_.c_str()) == 0;
-}
-
-bool StdFile::truncate(size_t size) {
-  if (fd_ < 0) {
-    return false;
-  }
-  return ::ftruncate(fd_, static_cast<off_t>(size)) == 0;
-}
-
 #endif
-} // namespace tiny_lsm
+}  // namespace tiny_lsm

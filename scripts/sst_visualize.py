@@ -112,12 +112,12 @@ def parse_sst(filename):
     extra_section_size = extra_len
 
     meta_rows = []
-    num_meta_entries = 0
+    num_block_meta_vec = 0
     if meta_section_size > 4:
         meta_data = data[meta_section_start:meta_section_end]
-        num_meta_entries = read_uint32(meta_data, 0)
+        num_block_meta_vec = read_uint32(meta_data, 0)
         offset = 4
-        for i in range(num_meta_entries):
+        for i in range(num_block_meta_vec):
             try:
                 block_offset = read_uint32(meta_data, offset)
                 offset += 4
@@ -221,7 +221,7 @@ def parse_sst(filename):
         block_section_end=f"{block_section_end:,}", block_section_size=f"{block_section_size:,}",
         num_blocks=len(block_tables), block_nav=block_nav, block_tables=block_tables_html,
         meta_block_offset=f"{meta_section_start:,}", meta_section_end=f"{meta_section_end:,}",
-        meta_section_size=f"{meta_section_size:,}", num_meta_entries=num_meta_entries, meta_html=meta_html,
+        meta_section_size=f"{meta_section_size:,}", num_block_meta_vec=num_block_meta_vec, meta_html=meta_html,
         bloom_offset=f"{bloom_section_start:,}", bloom_section_end=f"{bloom_section_end:,}",
         bloom_section_size=f"{bloom_section_size:,}", bloom_html=bloom_html,
         extra_offset=f"{extra_offset:,}", file_size=f"{file_size:,}",
@@ -331,7 +331,7 @@ def get_html_template():
                 <div class="info-grid">
                     <div>范围 (bytes):</div><div>{meta_block_offset} - {meta_section_end}</div>
                     <div>大小:</div><div>{meta_section_size} bytes</div>
-                    <div>条目数量:</div><div>{num_meta_entries}</div>
+                    <div>条目数量:</div><div>{num_block_meta_vec}</div>
                 </div>
                 {meta_html}
             </div>

@@ -16,7 +16,7 @@ WAL::WAL(const std::string& log_dir, size_t buffer_size,
       clean_interval_(clean_interval),
       file_size_limit_(file_size_limit),
       stop_cleaner_(false) {
-    // TODO: Lab 5.4 实现WAL的初始化流程
+    // TODO: 实现WAL的初始化流程
     // ? 1. 设置 active_log_path_ = log_dir + "/wal.0"
     // ? 2. 用 FileObj::open(active_log_path_, true) 打开或创建 WAL 文件
     // ? 3. 启动清理线程: cleaner_thread_ = std::thread(&WAL::cleaner, this)
@@ -58,7 +58,7 @@ WAL::WAL(const std::string& log_dir, size_t buffer_size,
 }
 
 WAL::~WAL() {
-    // TODO: Lab 5.4 实现WAL的清理流程
+    // TODO: 实现WAL的清理流程
     // ? 1. 强制将缓冲区所有内容刷盘: log({}, true)
     // ? 2. 加锁设置 stop_cleaner_ = true
     // ? 3. 等待清理线程结束: cleaner_thread_.join()
@@ -80,7 +80,7 @@ WAL::~WAL() {
 
 std::map<uint64_t, std::vector<Record>> WAL::recover(
     const std::string& log_dir, uint64_t max_flushed_seq) {
-    // TODO: Lab 5.5 检查需要重放的WAL日志
+    // TODO: 检查需要重放的WAL日志
     // ? 1. 若 log_dir 不存在则直接返回空 map
     // ? 2. 遍历目录找到所有 "wal." 前缀的文件
     // ? 3. 按 seq 升序排序
@@ -130,7 +130,7 @@ std::map<uint64_t, std::vector<Record>> WAL::recover(
 
 // WAL日志刷盘
 void WAL::flush() {
-    // TODO: Lab 5.4 强制刷盘
+    // TODO: 强制刷盘
     // ? 当前实现仅需加锁保证当前写入完成即可
     // ? 若 log() 中使用了缓冲区, 这里需要确保缓冲区内容全部落盘
     log({}, true);
@@ -142,7 +142,7 @@ void WAL::reset_max_flushed_seq(uint64_t seq) {
 }
 
 void WAL::log(const std::vector<Record>& records, bool force_flush) {
-    // TODO: Lab 5.4 实现WAL的写入流程
+    // TODO: 实现WAL的写入流程
     // ? 1. 加锁
     // ? 2. 将 records 追加到 log_buffer_
     // ? 3. 若 log_buffer_.size() < buffer_size_ 且 !force_flush 则直接返回
@@ -178,7 +178,7 @@ void WAL::log(const std::vector<Record>& records, bool force_flush) {
 }
 
 void WAL::cleaner() {
-    // TODO: Lab 5.4 实现WAL的清理线程
+    // TODO:  实现WAL的清理线程
     // ? 循环:
     // ?   1. sleep clean_interval_ 秒
     // ?   2. 若 stop_cleaner_ 为 true 则退出

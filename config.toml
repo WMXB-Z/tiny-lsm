@@ -4,8 +4,8 @@
 # LSM Tree Configuration
 [lsm.core]
 # Memory table size limit (64MB)
-# LSM_TOL_MEM_SIZE_LIMIT = 67108864 # Calculated from 64 * 1024 * 1024 MemTable 容量限制
-LSM_TOL_MEM_SIZE_LIMIT = 65536 
+LSM_TOL_MEM_SIZE_LIMIT = 67108864 # Calculated from 64 * 1024 * 1024 MemTable 容量限制
+# LSM_TOL_MEM_SIZE_LIMIT = 65536 
 # Per-memory table size limit (4MB)
 # LSM_PER_MEM_SIZE_LIMIT = 4194304 # Calculated from 4 * 1024 * 1024 单个 Skiplist 容量限制
 LSM_PER_MEM_SIZE_LIMIT = 8192

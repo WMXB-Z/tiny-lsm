@@ -7,21 +7,20 @@
 #include <vector>
 
 #include "block/block_iterator.h"
-
 namespace tiny_lsm {
 
-class SstIterator;
+// class SstIterator;
 class SST;
 
-std::optional<std::pair<SstIterator, SstIterator>> sst_iters_monotony_predicate(
-    std::shared_ptr<SST> sst, uint64_t tranc_id,
-    std::function<int(const std::string&)> predicate);
+// std::optional<std::pair<SstIterator, SstIterator>> sst_iters_monotony_predicate(
+//     std::shared_ptr<SST> sst, uint64_t tranc_id,
+//     std::function<int(const std::string&)> predicate);
 
 class SstIterator : public BaseIterator {
     // 友元函数
-    friend std::optional<std::pair<SstIterator, SstIterator>> sst_iters_monotony_predicate(
-        std::shared_ptr<SST> sst, uint64_t tranc_id,
-        std::function<int(const std::string&)> predicate);
+    // friend std::optional<std::pair<SstIterator, SstIterator>> sst_iters_monotony_predicate(
+    //     std::shared_ptr<SST> sst, uint64_t tranc_id,
+    //     std::function<int(const std::string&)> predicate);
     
     // 友元类
     friend SST;
@@ -39,16 +38,18 @@ private:
     void set_block_it(std::shared_ptr<BlockIterator> it);
 
 public:
-    // 创建迭代器, 并移动到第一个key
+    SstIterator(){}
+    // 创建迭代器,并移动到第一个key
     SstIterator(std::shared_ptr<SST> sst, uint64_t tranc_id, bool keep_all_versions = false);
-    // 创建迭代器, 并移动到第指定key
+    // 创建迭代器并移动到第指定key
     SstIterator(std::shared_ptr<SST> sst, const std::string& key, uint64_t tranc_id, bool keep_all_versions = false);
 
     // !创建迭代器, 并移动到第指定前缀的首端或者尾端（未实现）
     // static std::optional<std::pair<SstIterator, SstIterator>>
     // iters_monotony_predicate(std::shared_ptr<SST> sst, uint64_t tranc_id,
     //                          std::function<bool(const std::string&)> predicate);
-    static std::optional<std::pair<SstIterator, SstIterator>> iters_monotony_predicate(std::shared_ptr<SST> sst, uint64_t tranc_id, const std::string& preffix);
+    std::optional<std::pair<SstIterator, SstIterator>> sst_iters_monotony_predicate( std::shared_ptr<SST> sst, uint64_t tranc_id, std::function<int(const std::string&)> predicate);
+    std::optional<std::pair<SstIterator, SstIterator>> iters_monotony_predicate(std::shared_ptr<SST> sst, uint64_t tranc_id, const std::string& preffix);
 
     void seek_first();
     void seek(const std::string& key);

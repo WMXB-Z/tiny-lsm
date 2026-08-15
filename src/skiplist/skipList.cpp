@@ -12,7 +12,7 @@ namespace tiny_lsm {
 
 // ************************ SkipListIterator ************************
 BaseIterator& SkipListIterator::operator++() {
-    // TODO: Lab1.2 任务：实现SkipListIterator的++操作符（个人实验通过）
+    // TODO: 实现SkipListIterator的++操作符
     // ? current 是当前节点指针, forward_[0] 是最底层链表的下一个节点
     if (current) {
         current = current->forward_[0];
@@ -21,42 +21,27 @@ BaseIterator& SkipListIterator::operator++() {
 }
 
 bool SkipListIterator::operator==(const BaseIterator& other) const {
-    // TODO: Lab1.2 任务：实现SkipListIterator的==操作符(个人实验通过)
+    // TODO: 实现SkipListIterator的==操作符
     // ? 需要先通过 get_type() 判断类型再做 dynamic_cast
-    if (other.get_type() != IteratorType::SkipListIterator) return false;
-    auto other_cast =
-        dynamic_cast<const SkipListIterator&>(other);  // 继承关系中类型转换
+    if (other.get_type() != IteratorType::SkipListIterator) 
+        return false;
+    auto other_cast = dynamic_cast<const SkipListIterator&>(other);  // 继承关系中类型转换
     return current == other_cast.current;
 }
 
 bool SkipListIterator::operator!=(const BaseIterator& other) const {
-    // TODO: Lab1.2 任务：实现SkipListIterator的!=操作符(个人实验通过)
+    // TODO: 实现SkipListIterator的!=操作符
     return !(*this == other); //这里直接!(operator==)
 }
 
 SkipListIterator::value_type SkipListIterator::operator*() const {
-    // TODO: Lab1.2 任务：实现SkipListIterator的*操作符(个人实验通过)
+    // TODO: 实现SkipListIterator的*操作符
     // ? 若 current 为空需抛出异常
-    if (!current) throw std::runtime_error("Dereferencing invalid iterator");
+    if (!current) 
+        throw std::runtime_error("Dereferencing invalid iterator");
     return {current->key_, current->value_};
 }
 
-IteratorType SkipListIterator::get_type() const {
-    // TODO: Lab1.2 任务：实现SkipListIterator的get_type(个人实验通过)
-    // ? 主要是为了熟悉基类的定义和继承关系, 返回IteratorType::SkipListIterator
-    return IteratorType::SkipListIterator;
-}
-
-// 非法情况：current存在但key_为空
-bool SkipListIterator::is_valid() const {
-    return current && !current->key_.empty();
-}
-
-bool SkipListIterator::is_end() const { return current == nullptr; }
-
-std::string SkipListIterator::get_key() const { return current->key_; }
-std::string SkipListIterator::get_value() const { return current->value_; }
-uint64_t SkipListIterator::get_tranc_id() const { return current->tranc_id_; }
 
 // ************************ SkipList ************************
 // 构造函数
@@ -109,14 +94,12 @@ void SkipList::put(const std::string& key, const std::string& value, uint64_t tr
         while (tmp->forward_[i] && cmp(tmp->forward_[i]->key_, key, tmp->forward_[i]->tranc_id_, tranc_id)) {
             tmp = tmp->forward_[i];
         }
-        // while (tmp->forward_[i] && *tmp->forward_[i] < *new_node) {
-        //     tmp = tmp->forward_[i];
-        // }
+
         spdlog::trace("SkipList--put({}, {}, {}), level{} needs updating", key, value, tranc_id, i);
         update_nodes[i] = tmp;  // 每次记录插入位置的前节点
     }
 
-    // （2）判断元素存在性，存在则直接更新值(感觉这里可以直接使用get()函数判断)
+    // （2）判断元素存在性，存在则直接更新值(这里可以直接使用get()函数判断)
     tmp = tmp->forward_[0];
     if (tmp && tmp->key_ == key && tmp->tranc_id_ == tranc_id) {
         // 若 key 存在且 tranc_id 相同，更新 value
@@ -188,15 +171,13 @@ SkipListIterator SkipList::get(const std::string& key, uint64_t tranc_id) {
     // 未找到返回空
     spdlog::trace("SkipList--get({}): not found", key);
 
-    // TODO: 完成查找后还需要额外实现SkipListIterator中的TODO部分(Lab1.2)
     return SkipListIterator{};
 }
 
-// 删除键值对(存在问题)
 // ! 这里的 remove 是跳表本身真实的 remove,  lsm 中通过使用 put 空值表示删除,
 // ! 这里只是为了实现完整的 SkipList 不会真正被上层调用
 void SkipList::remove(const std::string& key) {
-    // TODO: Lab1.1 任务：实现删除键值对（个人实现已通过）
+    // TODO: 实现删除键值对
     // ? 从最高层开始查找目标节点并更新各层指针
     // ? 注意同时维护 backward_ 指针和 size_bytes
 
@@ -279,7 +260,7 @@ SkipListIterator SkipList::end() {
 // 找到前缀区间的起始位置的迭代器
 // 返回第一个前缀匹配或者大于前缀的迭代器
 SkipListIterator SkipList::begin_preffix(const std::string& preffix) {
-    // TODO: Lab1.3 任务：实现前缀查询的起始位置(y)
+    // TODO:  实现前缀查询的起始位置(y)
     // 实现跳表的查找+按字符前缀匹配
     spdlog::trace("SkipList--begin_preffix('{}') called", preffix);
 
@@ -293,15 +274,14 @@ SkipListIterator SkipList::begin_preffix(const std::string& preffix) {
     }
     tmp = tmp->forward_[0];  // 移动到最底层
     if (tmp && tmp->key_ == preffix) {
-        spdlog::trace("SkipList--begin_preffix('{}'): first match at '{}'",
-                      preffix, tmp->key_);
+        spdlog::trace("SkipList--begin_preffix('{}'): first match at '{}'", preffix, tmp->key_);
     }
     return SkipListIterator(tmp);
 }
 
 // 找到前缀区间的末尾位置的迭代器
 SkipListIterator SkipList::end_preffix(const std::string& prefix) {
-    // TODO: Lab1.3 任务：实现前缀查询的终结位置(y)
+    // TODO:  实现前缀查询的终结位置(y)
     // ? 找到第一个 key 不以 prefix 开头的节点作为终结位置
     // 如何快速查找？（目前依旧是跳表遍历）
     // 借助已有的起始位置迭代器？（这里不使用，感觉可以后续优化）
@@ -309,24 +289,23 @@ SkipListIterator SkipList::end_preffix(const std::string& prefix) {
     spdlog::trace("SkipList--end_preffix('{}') called", prefix);
 
     auto tmp = head;
-    // 从最高层开始查找(能够利用开始位置的查询优化？)
+    // 从最高层开始查找
     for (int i = current_level - 1; i >= 0; --i) {
         while (tmp->forward_[i] && tmp->forward_[i]->key_ < prefix) {
             tmp = tmp->forward_[i];
         }
     }
+    
     tmp = tmp->forward_[0];  // 移动到最底层
-    // 找到第一个键不以给定前缀开头的节点(相当于普通遍历，并不高效是否可以借助forward_优化？)
+    // 找到第一个键不以给定前缀开头的节点
     while (tmp && tmp->key_.substr(0, prefix.size()) == prefix) {
         tmp = tmp->forward_[0];
     }
 
     if (tmp) {
-        spdlog::trace("SkipList--begin_preffix('{}'): end at '{}'", prefix,
-                      tmp->key_);
+        spdlog::trace("SkipList--begin_preffix('{}'): end at '{}'", prefix, tmp->key_);
     } else {
-        spdlog::trace("SkipList--begin_preffix('{}'): end at the skiplist end",
-                      prefix);
+        spdlog::trace("SkipList--begin_preffix('{}'): end at the skiplist end", prefix);
     }
     // 返回当前节点的迭代器
     return SkipListIterator(tmp);
@@ -342,10 +321,8 @@ SkipListIterator SkipList::end_preffix(const std::string& prefix) {
 // ?   >0: 不满足谓词, 需要向右移动
 // ?   <0: 不满足谓词, 需要向左移动
 // ! Skiplist 中的谓词查询不会进行事务id的判断, 需要上层自己进行判断
-std::optional<std::pair<SkipListIterator, SkipListIterator>>
-SkipList::iters_monotony_predicate(
+std::optional<std::pair<SkipListIterator, SkipListIterator>> SkipList::iters_monotony_predicate(
     std::function<int(const std::string&)> predicate) {
-    // TODO: Lab1.3 任务：实现谓词查询（已通过）
     // ! 返回的是区间两端的迭代器
     // ? 分两步: 1. 利用多层跳表快速找到谓词满足区间内的一个节点
     // ?         2. 分别向前/向后扩展, 利用 backward_ 和 forward_确定区间边界
@@ -384,14 +361,13 @@ SkipList::iters_monotony_predicate(
     if (!find1) {
         // 无法找到第一个满足谓词的迭代器, 直接返回
         spdlog::trace("SkipList--iters_monotony_predicate(): no match found");
-
         return std::nullopt;
     }
 
     // 记住当前 current 的位置
     auto current2 = current;
 
-    // current 已经满足谓词, 但有可能中途跳过了节点, 需要前向检查
+    // current 已经满足谓词, 需要前向检查找符合谓词条件的左边界
     // 注意此时 不能直接从 current_level - 1 层开始,
     // 因为当前节点的层数不一定等于最大层数
     for (int i = current->backward_.size() - 1; i >= 0; --i) {
@@ -407,14 +383,12 @@ SkipList::iters_monotony_predicate(
                 current = current->backward_[i].lock();
                 continue;
             } else if (direction > 0) {
-                // 前一个位置不满足谓词
-                // 需要尝试更小的步长(层级)
+                // 前一个位置不满足谓词，需要尝试更小的层级
                 break;
             } else {
                 // 因为当前位置满足了谓词, 前一个位置不可能返回-1
                 // 这种情况属于跳表实现错误, 需要排查
                 spdlog::error("iters_predicate: invalid direction");
-
                 throw std::runtime_error("iters_predicate: invalid direction");
             }
         }
@@ -423,7 +397,7 @@ SkipList::iters_monotony_predicate(
     // 找到第一个满足谓词的节点
     begin_iter = SkipListIterator(current);
 
-    // 找到最后一个满足谓词的节点
+    // 找到满足谓词的条件的右边界区间
     for (int i = current2->forward_.size() - 1; i >= 0; --i) {
         while (true) {
             if (current2->forward_[i] == nullptr) {
@@ -436,15 +410,12 @@ SkipList::iters_monotony_predicate(
                 current2 = current2->forward_[i];
                 continue;
             } else if (direction < 0) {
-                // 后一个位置不满足谓词
-                // 需要尝试更小的步长(层级)
+                // 后一个位置不满足谓词，需要尝试更小的层级
                 break;
             } else {
                 // 因为当前位置满足了谓词, 后一个位置不可能返回1
                 // 这种情况属于跳表实现错误, 需要排查
-
                 spdlog::error("iters_predicate: invalid direction");
-
                 throw std::runtime_error("iters_predicate: invalid direction");
             }
         }
@@ -455,9 +426,7 @@ SkipList::iters_monotony_predicate(
     ++end_iter;
 
     spdlog::trace("SkipList--iters_monotony_predicate(): range found");
-
-    return std::make_optional<std::pair<SkipListIterator, SkipListIterator>>(
-        begin_iter, end_iter);
+    return std::make_optional<std::pair<SkipListIterator, SkipListIterator>>(begin_iter, end_iter);
 }
 
 // ? 打印跳表, 你可以在出错时调用此函数进行调试

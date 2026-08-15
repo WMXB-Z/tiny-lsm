@@ -10,16 +10,16 @@ BlockMeta::BlockMeta() : offset(0), first_key(""), last_key("") {}
 BlockMeta::BlockMeta(size_t offset, const std::string& first_key, const std::string& last_key)
     : offset(offset), first_key(first_key), last_key(last_key) {}
 
-void BlockMeta::encode_meta_to_slice(std::vector<BlockMeta>& meta_entries, std::vector<uint8_t>& metadata) {
-    // TODO: Lab 3.4 将内存中所有`Blcok`的元数据编码为二进制字节数组（已通过）
+void BlockMeta::encode_meta_to_slice(std::vector<BlockMeta>& block_meta_vec, std::vector<uint8_t>& metadata) {
+    // TODO:  将内存中所有`Blcok`的元数据编码为二进制字节数组
     // ? 输入输出都由参数中的引用给定, 你不需要自己创建`vector`
 
     // 1. Mete段总大小：num_entries(32) + 所有entries的大小 + hash(32)
-    uint32_t num_entries = meta_entries.size();
+    uint32_t num_entries = block_meta_vec.size();
     size_t total_size = sizeof(uint32_t);  // num_entries
 
     // 计算所有entries的大小
-    for (const auto& meta : meta_entries) {
+    for (const auto& meta : block_meta_vec) {
         total_size += sizeof(uint32_t) +       // offset
                       sizeof(uint16_t) +       // first_key_len
                       meta.first_key.size() +  // first_key
@@ -37,7 +37,7 @@ void BlockMeta::encode_meta_to_slice(std::vector<BlockMeta>& meta_entries, std::
     ptr += sizeof(uint32_t);
 
     // 4. 写入每个entry
-    for (const auto& meta : meta_entries) {
+    for (const auto& meta : block_meta_vec) {
         // 写入 offset
         uint32_t offset32 = static_cast<uint32_t>(meta.offset);
         memcpy(ptr, &offset32, sizeof(uint32_t));
@@ -68,18 +68,18 @@ void BlockMeta::encode_meta_to_slice(std::vector<BlockMeta>& meta_entries, std::
     memcpy(ptr, &hash, sizeof(uint32_t));
 }
 
-std::vector<BlockMeta> BlockMeta::decode_meta_from_slice(const std::vector<uint8_t>& metadata) {
-    // TODO: Lab 3.4 将二进制字节数组解码为内存中的`Blcok`元数据
-    std::vector<BlockMeta> meta_entries;
+std::vector<BlockMeta> BlockMeta::decode_meta_from_slice(const std::vector<uint8_t>& datameta) {
+    // TODO:将二进制字节数组解码为内存中的`Blcok Meta`数据
+    std::vector<BlockMeta> block_meta_vec;
 
     // 1. 验证最小长度
-    if (metadata.size() < sizeof(uint32_t) * 2) {  // 至少要有num_entries和hash
+    if (datameta.size() < sizeof(uint32_t) * 2) {  // 至少要有num_entries和hash
         throw std::runtime_error("Invalid metadata size");
     }
 
     // 2. 读取元素个数
     uint32_t num_entries;
-    const uint8_t* ptr = metadata.data();
+    const uint8_t* ptr = datameta.data();
     memcpy(&num_entries, ptr, sizeof(uint32_t));
     ptr += sizeof(uint32_t);
 
@@ -108,14 +108,14 @@ std::vector<BlockMeta> BlockMeta::decode_meta_from_slice(const std::vector<uint8
         meta.last_key.assign(reinterpret_cast<const char*>(ptr), last_key_len);
         ptr += last_key_len;
 
-        meta_entries.push_back(meta);
+        block_meta_vec.push_back(meta);
     }
 
     // 4. 验证hash
     uint32_t stored_hash;
     memcpy(&stored_hash, ptr, sizeof(uint32_t));
 
-    const uint8_t* data_start = metadata.data() + sizeof(uint32_t);
+    const uint8_t* data_start = datameta.data() + sizeof(uint32_t);
     const uint8_t* data_end = ptr;
     size_t data_len = data_end - data_start;
 
@@ -126,6 +126,6 @@ std::vector<BlockMeta> BlockMeta::decode_meta_from_slice(const std::vector<uint8
         throw std::runtime_error("Metadata hash mismatch");
     }
 
-    return meta_entries;
+    return block_meta_vec;
 }
 }  // namespace tiny_lsm

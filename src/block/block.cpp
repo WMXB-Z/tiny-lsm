@@ -15,12 +15,12 @@ namespace tiny_lsm {
 Block::Block(size_t capacity) : capacity(capacity) {}
 
 std::vector<uint8_t> Block::encode(bool with_hash) {
-    // TODO: Lab 3.1 编码单个类实例形成一段字节数组（已通过）
+    // TODO: 编码单个类实例形成一段字节数组
     // ? 格式: [data段 长度不固定] + [offsets数组段, 每项uint16_t] + [元素个数段 uint16_t] + |校验码 uint16_t|
     // ? 若 with_hash == true, 末尾额外追加 uint32_t 的 校验值
     // ? CRC 覆盖除自身之外的所有字节
 
-    // 计算总大小：数据段 + 偏移数组(每个偏移2字节) + 元素个数(2字节)
+    // 计算总大小：数据部分大小 + 偏移数组大小(每个偏移2字节) + 元素个数标志的大小(2字节)
     size_t total_bytes = data.size() * sizeof(uint8_t) + offsets.size() * sizeof(uint16_t) + sizeof(uint16_t);
     if (with_hash) {
         total_bytes += sizeof(uint32_t);  // 如果需要哈希值, 增加4字节
@@ -58,7 +58,7 @@ std::vector<uint8_t> Block::encode(bool with_hash) {
 }
 
 std::shared_ptr<Block> Block::decode(const std::vector<uint8_t>& encoded, bool with_hash) {
-    // TODO: Lab 3.1 解码字节数组形成类实例（已通过）
+    // TODO:  解码字节数组形成类实例
     // ? 从末尾读取元素个数, 若 with_hash 为 true 先校验 CRC
     // ? 然后依次读取 offsets 和 data 段
     // 使用 make_shared 创建对象
@@ -103,8 +103,7 @@ std::shared_ptr<Block> Block::decode(const std::vector<uint8_t>& encoded, bool w
 
     // 6. 复制数据段
     block->data.reserve(offsets_section_start);  // 优化内存分配
-    block->data.assign(encoded.begin(),
-                       encoded.begin() + offsets_section_start);
+    block->data.assign(encoded.begin(), encoded.begin() + offsets_section_start);
 
     return block;
 }
@@ -133,7 +132,7 @@ size_t Block::get_offset_at(size_t idx) const {
 }
 
 bool Block::add_entry(const std::string& key, const std::string& value, uint64_t tranc_id, bool force_write) {
-    // TODO: Lab 3.1 添加一个键值对到block中（已通过）
+    // TODO: 添加一个键值对到block中
     // ? 每条 entry 格式: [key_len:uint16_t][key][value_len:uint16_t][value][tranc_id:uint64_t] 
     // ? 若 !force_write 且当前容量不足则返回 false ? 成功添加后记录偏移到 offsets, 返回 true
     // 对齐/预留/安全冗余？可用3 * sizeof(uint16_t) ？
@@ -172,7 +171,7 @@ bool Block::add_entry(const std::string& key, const std::string& value, uint64_t
 
 // 从指定偏移量获取entry的key
 std::string Block::get_key_at(size_t offset) const {
-    // TODO: Lab 3.1 从指定偏移量获取entry的key（已通过）
+    // TODO: 从指定偏移量获取entry的key
     // ? 读取 data[offset] 处的 uint16_t key_len（key长度）, 再取后续 key_len 个字节（即key字符串）
     uint16_t key_len;
     memcpy(&key_len, data.data() + offset, sizeof(uint16_t));
@@ -183,7 +182,7 @@ std::string Block::get_key_at(size_t offset) const {
 
 // 从指定偏移量获取entry的value
 std::string Block::get_value_at(size_t offset) const {
-    // TODO: Lab 3.1 从指定偏移量获取entry的value（已通过）
+    // TODO: 从指定偏移量获取entry的value
     // ? 先跳过 key_len + key, 再读取 uint16_t value_len, 最后取 value
     // 先获取key长度
     uint16_t key_len;
@@ -201,7 +200,7 @@ std::string Block::get_value_at(size_t offset) const {
 }
 
 uint64_t Block::get_tranc_id_at(size_t offset) const {
-    // TODO: Lab 3.1 从指定偏移量获取entry的tranc_id（已通过）
+    // TODO:从指定偏移量获取entry的tranc_id
     // ? 先跳过 key 和 value, 读取末尾的 uint64_t tranc_id
     // 先获取key长度
     uint16_t key_len;
@@ -227,7 +226,7 @@ int Block::compare_key_at(size_t offset, const std::string& target) const {
 
 // 相同的key连续分布, 且相同的key的事务id从大到小排布，这里的逻辑是找到最接近 tranc_id 的键值对的索引位置
 int Block::adjust_idx_by_tranc_id(size_t idx, uint64_t tranc_id) {
-    // TODO Lab5.1 找到最接近 tranc_id 的键值对的索引位置（已通过）
+    // TODO 找到最接近 tranc_id 的键值对的索引位置
     // ? 后续实现事务后需要更新这里的实现
     // ? tranc_id == 0: 向前找最小索引 (最大事务id) 版本
     // ? tranc_id != 0: 找满足 tranc_id_ <= tranc_id 的最新版本（最大且满足tranc_id_ <= tranc_id的版本）
@@ -290,7 +289,7 @@ std::optional<std::string> Block::get_value_binary(const std::string& key, uint6
 }
 
 std::optional<size_t> Block::get_idx_binary(const std::string& key, uint64_t tranc_id) {
-    // TODO: Lab 3.1 使用二分查找获取key对应的索引（已通过）
+    // TODO: 使用二分查找获取key对应的索引
     // ? 在 offsets 数组上做二分查找, 利用 compare_key_at 比较
     // ? 找到后调用 adjust_idx_by_tranc_id 进行事务可见性修正
     if (offsets.empty()) {
@@ -326,7 +325,7 @@ std::optional<size_t> Block::get_idx_binary(const std::string& key, uint64_t tra
 
 std::optional<std::pair<std::shared_ptr<BlockIterator>, std::shared_ptr<BlockIterator>>>
 Block::iters_preffix(uint64_t tranc_id, const std::string& preffix) {
-    // TODO: Lab 3.3 获取前缀匹配的区间迭代器（已通过）
+    // TODO: 获取前缀匹配的区间迭代器
     // ? 将前缀匹配转化为单调谓词, 调用 get_monotony_predicate_iters
     // ? 谓词: -key.compare(0, preffix.size(), preffix)
     auto func = [&preffix](const std::string& key) {
@@ -349,7 +348,7 @@ Block::iters_preffix(uint64_t tranc_id, const std::string& preffix) {
 //   <0: 不满足谓词, 需要向左移动
 std::optional<std::pair<std::shared_ptr<BlockIterator>, std::shared_ptr<BlockIterator>>>
 Block::get_monotony_predicate_iters(uint64_t tranc_id, std::function<int(const std::string&)> predicate) {
-    // TODO: Lab 3.3 使用二分查找获取满足谓词的区间迭代器（已通过）
+    // TODO: 使用二分查找获取满足谓词的区间迭代器
     // ? 第一次二分: 找到 first (满足谓词的最左边索引)
     // ? 第二次二分: 找到 last  (满足谓词的最右边索引)
     // ? 返回 [BlockIterator(first), BlockIterator(last+1)]
@@ -420,13 +419,13 @@ size_t Block::cur_size() const {
 bool Block::is_empty() const { return offsets.empty(); }
 
 BlockIterator Block::begin(uint64_t tranc_id) {
-    // TODO: Lab 3.2 获取begin位置的迭代器对象（已通过）
+    // TODO:获取begin位置的迭代器对象
     // ? 返回指向第 0 个 entry 的迭代器: BlockIterator(shared_from_this(), 0, tranc_id)
      return BlockIterator(shared_from_this(), 0, tranc_id);
 }
 
 BlockIterator Block::end() {
-    // TODO: Lab 3.2 获取end位置的迭代器对象（已通过）
+    // TODO:  获取end位置的迭代器对象
     // ? 返回指向末尾 (offsets.size()) 的迭代器
     return BlockIterator(shared_from_this(), offsets.size(), 0);
 }

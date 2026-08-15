@@ -43,8 +43,8 @@ struct SearchItem {
     std::string key_;
     std::string value_;
     uint64_t tranc_id_; //事务ID，表示这个 key-value 是在哪个“时间点/事务”产生的
-    int idx_;       // 当前元素来自“第几个输入源”(用于区分同一层级不同表)
-    int level_;  // 来自sst的level(用于区分不同LSM层级)
+    int idx_;       // 当前元素来自“第几个SSTable”(用于区分同level的不同SStable)
+    int level_;  // 来自sst的level(用于区分不同层级)
 
     SearchItem() = default;
     SearchItem(std::string k, std::string v, int i, int l, uint64_t tranc_id)
@@ -55,6 +55,7 @@ struct SearchItem {
           tranc_id_(tranc_id) {}
 };
 
+//这里的大小操作的重写，会影响后续HeapIter中堆的构建
 bool operator<(const SearchItem& a, const SearchItem& b);
 bool operator>(const SearchItem& a, const SearchItem& b);
 bool operator==(const SearchItem& a, const SearchItem& b);
@@ -67,8 +68,7 @@ class HeapIterator : public BaseIterator {
 public:
     // HeapIterator::HeapIterator() = default;不能显示添加无参构造器，和下面的默认构造函数二选一
     HeapIterator(bool skip_delete = true, bool keep_all_versions = false);
-    HeapIterator(std::vector<SearchItem> item_vec, uint64_t max_tranc_id,
-                 bool skip_delete = true, bool keep_all_versions = false);
+    HeapIterator(std::vector<SearchItem> item_vec, uint64_t max_tranc_id, bool skip_delete = true, bool keep_all_versions = false);
     pointer operator->() const;
     virtual value_type operator*() const override;
     BaseIterator& operator++() override;
@@ -89,8 +89,7 @@ private:
 
 private:
     // priority_queue默认大根堆，这里指定是小根堆，第三参数：表示谁应该被压下去（less:小的压下面；greater大的压下面）
-    std::priority_queue<SearchItem, std::vector<SearchItem>,
-                        std::greater<SearchItem>> items;    
+    std::priority_queue<SearchItem, std::vector<SearchItem>, std::greater<SearchItem>> items;    
     // mutable：允许这个成员变量在 const 成员函数中被修改
     mutable std::shared_ptr<value_type> current;  // 用于存储当前元素。
     uint64_t max_tranc_id_ = 0;

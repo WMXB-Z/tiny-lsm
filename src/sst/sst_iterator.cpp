@@ -9,20 +9,20 @@
 namespace tiny_lsm {
 
 // 在一个 SST 里，根据一个“单调谓词”，找出满足条件的连续区间 [begin, end)
-std::optional<std::pair<SstIterator, SstIterator>> sst_iters_monotony_predicate(
+std::optional<std::pair<SstIterator, SstIterator>> SstIterator::sst_iters_monotony_predicate(
     std::shared_ptr<SST> sst, uint64_t tranc_id,
     std::function<int(const std::string&)> predicate) {
-    // TODO: Lab 3.7 实现谓词查询功能
+    // TODO: 实现谓词查询功能
     // predicate返回值:
     //    0: 满足谓词
     //   >0: 不满足谓词, 需要向右移动
     //   <0: 不满足谓词, 需要向左移动
     std::optional<SstIterator> final_begin = std::nullopt;
     std::optional<SstIterator> final_end = std::nullopt;
-    for (int block_idx = 0; block_idx < sst->meta_entries.size(); block_idx++) {
+    for (int block_idx = 0; block_idx < sst->block_meta_vec.size(); block_idx++) {
         auto block = sst->read_block(block_idx);
 
-        BlockMeta& meta_i = sst->meta_entries[block_idx];
+        BlockMeta& meta_i = sst->block_meta_vec[block_idx];
         //当前block没有且只能向左找，但前述block已判断过，故没有符合的
         if (predicate(meta_i.first_key) < 0) { 
             break;
@@ -61,7 +61,7 @@ std::optional<std::pair<SstIterator, SstIterator>> sst_iters_monotony_predicate(
 
 std::optional<std::pair<SstIterator, SstIterator>> SstIterator::iters_monotony_predicate(
     std::shared_ptr<SST> sst, uint64_t tranc_id, const std::string& preffix){
-    // TODO: Lab 3.7 实现前缀查询功能
+    // TODO: 实现前缀查询功能
     auto func = [&preffix](const std::string& key) {
         //这里取反，是为了和利用谓词区间的查询规则
         // 在谓词区间查询中返回值: 0: 满足谓词；>0: 不满足谓词, 需要向右移动； <0: 不满足谓词, 需要向左移动
@@ -70,6 +70,7 @@ std::optional<std::pair<SstIterator, SstIterator>> SstIterator::iters_monotony_p
     };
     return sst_iters_monotony_predicate(sst, tranc_id, func);
 }
+
 
 SstIterator::SstIterator(std::shared_ptr<SST> sst, uint64_t tranc_id, bool keep_all_versions)
     : m_sst(sst),
