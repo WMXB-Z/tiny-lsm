@@ -36,7 +36,7 @@ TranContext::TranContext(uint64_t tranc_id, std::shared_ptr<LSMEngine> engine,
       engine_(std::move(engine)),
       tranManager_(tranManager),
       isolation_level_(isolation_level) {
-    // TODO: Lab 5.2 事务句柄初始化
+    // TODO: 事务句柄初始化
     // "创建操作"的记录对象，放入操作记录数组中
     operations.emplace_back(Record::createRecord(tranc_id_));
 }
@@ -45,7 +45,7 @@ TranContext::TranContext(uint64_t tranc_id, std::shared_ptr<LSMEngine> engine,
 //   ├─ 创建Record对象，并记录
 //   └─ 暂存k-v至temp_map_中，等待事务的commit/abort
 void TranContext::put(const std::string& key, const std::string& value) {
-    // TODO: Lab 5.2 put 实现
+    // TODO: put 实现
     spdlog::trace(
         "LSM--"
         "lsm_iters_monotony_predicate: Starting query for tranc_id={}",
@@ -65,7 +65,7 @@ void TranContext::put(const std::string& key, const std::string& value) {
 
 // 实现上与put完全相同
 void TranContext::remove(const std::string& key) {
-    // TODO: Lab 5.2 remove 实现
+    // TODO: remove 实现
     spdlog::trace("TranContext--remove({}) called, tranc_id={}", key,
                   tranc_id_);
 
@@ -81,7 +81,7 @@ void TranContext::remove(const std::string& key) {
 }
 
 std::optional<std::string> TranContext::get(const std::string& key) {
-    // TODO: Lab 5.2 get 实现
+    // TODO: get 实现
     spdlog::trace("TranContext--get({}) called, tranc_id={}", key, tranc_id_);
     auto isolation_level = get_isolation_level();
 
@@ -102,9 +102,7 @@ std::optional<std::string> TranContext::get(const std::string& key) {
             isolation_level == IsolationLevel::SERIALIZABLE) {
         // 2.2 如果隔离级别是 SERIALIZABLE 或 REPEATABLE_READ, 第一次使用 engine
         // 查询后还需要将值暂存至上下文中
-        // !存在问题，仅靠当前事务的id是不足以判断key是否已提交的，无法判断key对当前事务的可见性
-        // !要真正实现key对当前事务的可见性判断，应该使用“事务可见性集合（committed set/snapshot）”
-        // !也不能直接使用“已提交的事务id集合”，事务id的大小并不能决定提交的时间次序（版本新旧）
+        // fix bug：事务创建时id的大小并不能决定提交的时间次序，我的做法是：在事务提交时重新分配id
         query = engine_->get(key, this->tranc_id_);
         // 将从engine_中读入的key保存在对应缓存
         read_map_[key] = query;
@@ -128,7 +126,7 @@ std::optional<std::string> TranContext::get(const std::string& key) {
 //   ├─ 将本事务的k-v写入memtable
 //   └─ 修改tranManager控制信息
 bool TranContext::commit(bool test_fail) {
-    // TODO: Lab 5.2 commit 实现
+    // TODO: commit 实现
     // 事务提交 = 逻辑上已经成功 + 满足持久性保证（写入了WAL）
     spdlog::info("TranContext--commit(): Starting commit for transaction ID={}",
                  tranc_id_);
@@ -232,7 +230,7 @@ bool TranContext::commit(bool test_fail) {
 }
 
 bool TranContext::abort() {
-    // TODO: Lab 5.2 abort（事务的回滚）实现 
+    // TODO: abort（事务的回滚）实现 
     spdlog::info("TranContext--abort(): Aborting transaction ID={}", tranc_id_);
 
     auto isolation_level = get_isolation_level();
@@ -252,7 +250,7 @@ enum IsolationLevel TranContext::get_isolation_level() {
 
 // *********************** TranManager ***********************
 TranManager::TranManager(std::string data_dir) : data_dir_(data_dir) {
-    // TODO: Lab 5.2 初始化时，从持久化的文件中恢复事务的状态信息
+    // TODO: 初始化时，从持久化的文件中恢复事务的状态信息
     auto file_path = get_tranc_info_file_path();
     // 判断文件是否存在
     if (!std::filesystem::exists(file_path)) {
@@ -291,7 +289,7 @@ TranManager::~TranManager() { write_tranc_info_file(); }
 // 事务管理器关闭时，将本次事务执行后的状态信息写入事务信息文件中包括：
 // 下一个新建事务将分配的id号、已刷盘事务数量和id
 void TranManager::write_tranc_info_file() {
-    // TODO: Lab 5.2 持久化事务状态信息
+    // TODO: 持久化事务状态信息
     int buffer_size = sizeof(uint64_t) * 2;
     std::vector<uint8_t> buf(buffer_size, 0);
     uint64_t global_seq = global_seq_.load();
@@ -305,7 +303,14 @@ void TranManager::write_tranc_info_file() {
 
 // 从事务信息文件中读取配置信息
 void TranManager::read_tranc_info_file() {
-    // TODO: Lab 5.2 读取持久化的事务状态信息
+    // TODO: 读取持久化的事务状态信息
+    // 若文件为空或不完整（例如上次进程被强杀，未写入完整状态），
+    // 按全新启动处理，避免对不存在的字节做越界读取
+    if (tranc_info_file_.size() < sizeof(uint64_t) * 2) {
+        global_seq_ = 0;
+        max_flushed_seq_ = 0;
+        return;
+    }
     global_seq_ = tranc_info_file_.read_uint64(0);
     max_flushed_seq_ = tranc_info_file_.read_uint64(sizeof(uint64_t));
 }
@@ -322,31 +327,15 @@ void TranManager::update_max_flushed_seq(uint64_t tranc_id){
     }
 }
 
-// 待flush的事务id数组中增加一个元素
-// void TranManager::add_ready_to_flush(uint64_t committed_seq, TransactionState state) {
-//     std::unique_lock lock(mutex_);
-//     ready_to_flush_[committed_seq] = state;
-// }
+uint64_t TranManager::get_global_seq(){
+    return global_seq_.load();
+}
 
-// 该操作在LSMEngine::flush时被调用
-// 将ready_to_flush_中已经flush的事务id移到flushedTrancIds_集合中
-// void TranManager::clean_ready_to_flush(uint64_t id) {
-//     // 当某个事务 tranc_id 被确认“已经 flush 到持久层”时，把它以及它之前可以一起确认的事务，
-//     // 统一推进到 flushedTrancIds_（已落盘集合），并清理中间状态。
-//     std::unique_lock lock(mutex_);
-//     while (!ready_to_flush_.empty()) {
-//         auto it = ready_to_flush_.begin();//取最小的key对应的迭代器
-//         if (it->first <= id) {
-//             ready_to_flush_.erase(it);
-//         } else {
-//             break;
-//         }
-//     }
-// }
 
 // 事务id计数器+1
 uint64_t TranManager::get_next_global_seq() {
-    return global_seq_.fetch_add(1);
+    // return global_seq_.fetch_add(1);
+    return ++global_seq_;
 }
 
 uint64_t TranManager::get_max_flushed_seq(){
@@ -358,7 +347,7 @@ uint64_t TranManager::get_max_flushed_seq(){
 
 std::shared_ptr<TranContext> TranManager::new_tranc(
     const IsolationLevel& isolation_level) {
-    // TODO: Lab 5.2 创建新事务（初始化事务上下文）
+    // TODO: 创建新事务（初始化事务上下文）
     spdlog::debug(
         "TranManager--new_tranc(): Creating new transaction with "
         "isolation level={}",
@@ -367,9 +356,9 @@ std::shared_ptr<TranContext> TranManager::new_tranc(
     // 获取锁
     std::unique_lock<std::mutex> lock(mutex_);
     // 获得事务id，并创建事务上下文对象
-    auto tranc_id = get_next_global_seq();
-    // activeTrans_[tranc_id] = std::make_shared<TranContext>(
-    //     tranc_id, engine_, shared_from_this(), isolation_level);
+    // auto tranc_id = get_next_global_seq();
+    auto tranc_id = get_global_seq();//修改为事务创建时，不做id的自增
+
     auto new_trancontext = std::make_shared<TranContext>(
         tranc_id, engine_, shared_from_this(), isolation_level);
 
@@ -378,7 +367,6 @@ std::shared_ptr<TranContext> TranManager::new_tranc(
         "isolation level={}",
         tranc_id, static_cast<int>(isolation_level));
 
-    // return activeTrans_[tranc_id];
     return new_trancontext;
 }
 

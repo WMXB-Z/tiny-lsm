@@ -52,7 +52,8 @@ private:
     // 第二个哈希函数
     // 返回值: 哈希值
     size_t hash2(const std::string& key) const;
-
+    
+    //用于组合hash1和hash2，从而生成多种不同的hash
     size_t hash(const std::string& key, size_t idx) const;
 };
 }  // namespace tiny_lsm

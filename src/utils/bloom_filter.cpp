@@ -15,7 +15,7 @@ BloomFilter::BloomFilter() {};
 BloomFilter::BloomFilter(size_t expected_elements, double false_positive_rate)
     : expected_elements_(expected_elements),
       false_positive_rate_(false_positive_rate) {
-    // TODO: Lab 4.9: 初始化数组长度
+    // TODO: 初始化数组长度
     // 计算布隆过滤器的位数组大小
     double m = -static_cast<double>(expected_elements) *
                std::log(false_positive_rate) / std::pow(std::log(2), 2);
@@ -31,7 +31,7 @@ BloomFilter::BloomFilter(size_t expected_elements, double false_positive_rate)
 }
 
 void BloomFilter::add(const std::string& key) {
-    // TODO: Lab 4.9: 添加一个记录到布隆过滤器中
+    // TODO:添加一个记录到布隆过滤器中
     // 对每个哈希函数计算哈希值，并将对应位置的位设置为true
     for (size_t i = 0; i < num_hashes_; ++i) {
         bits_[hash(key, i)] = true;
@@ -40,7 +40,7 @@ void BloomFilter::add(const std::string& key) {
 
 //  如果key可能存在于布隆过滤器中，返回true；否则返回false
 bool BloomFilter::possibly_contains(const std::string& key) const {
-    // TODO: Lab 4.9:使用布隆过滤器做命中判断
+    // TODO: 使用布隆过滤器做命中判断
     // 对每个哈希函数计算哈希值，检查对应位置的位是否都为true
     for (size_t i = 0; i < num_hashes_; ++i) {
         auto bit_idx = hash(key, i);
@@ -73,7 +73,7 @@ size_t BloomFilter::hash(const std::string& key, size_t idx) const {
 
 // 编码布隆过滤器为 std::vector<uint8_t>
 std::vector<uint8_t> BloomFilter::encode() {
-    // TODO: Lab 4.9: 编码布隆过滤器
+    // TODO: 编码布隆过滤器
     std::vector<uint8_t> data;  // 二进制数组
 
     // 编码 expected_elements_
@@ -116,7 +116,7 @@ std::vector<uint8_t> BloomFilter::encode() {
 
 // 从 std::vector<uint8_t> 解码布隆过滤器
 BloomFilter BloomFilter::decode(const std::vector<uint8_t>& data) {
-    // TODO: Lab 4.9: 解码布隆过滤器
+    // TODO: 解码布隆过滤器
     size_t index = 0;
 
     // 解码 expected_elements_

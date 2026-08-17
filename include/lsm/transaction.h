@@ -44,7 +44,7 @@ public:
     void remove(const std::string& key);    //事务内部的删除
     std::optional<std::string> get(const std::string& key);
 
-    // ! test_fail = true 是测试中手动触发的崩溃
+    // test_fail = true 用于测试中手动触发的崩溃
     bool commit(bool test_fail = false);    //事务提交
     bool abort();       
     enum IsolationLevel get_isolation_level();
@@ -61,9 +61,7 @@ public:
     enum IsolationLevel isolation_level_;
 
 private:
-    std::unordered_map<std::string,
-                       std::optional<std::pair<std::string, uint64_t>>>
-        read_map_;  // 保存从engine中读入的k-v
+    std::unordered_map<std::string, std::optional<std::pair<std::string, uint64_t>>> read_map_;  // 保存从engine中读入的k-v
 };
 
 // TranManager: 分配事务 ID + 写WAL + 崩溃恢复
@@ -75,6 +73,7 @@ public:
     void set_engine(std::shared_ptr<LSMEngine> engine);
     std::shared_ptr<TranContext> new_tranc(const IsolationLevel& isolation_level);
 
+    uint64_t get_global_seq();
     uint64_t get_next_global_seq();
     uint64_t get_max_flushed_seq();
 

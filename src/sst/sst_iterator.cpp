@@ -97,7 +97,7 @@ void SstIterator::set_block_it(std::shared_ptr<BlockIterator> it) {
 }
 
 void SstIterator::seek_first() {
-    // TODO: Lab 3.6 将迭代器定位到SST中的第一个key（已通过）
+    // TODO: 将迭代器定位到SST中的第一个key
     if (!m_sst || m_sst->num_blocks() == 0) {
         m_block_it = nullptr;
         return;
@@ -110,7 +110,7 @@ void SstIterator::seek_first() {
 
 // 通过SscIterator对sst文件进行key查询
 void SstIterator::seek(const std::string& key) {
-    // TODO: Lab 3.6 获得SST中的指定key的位置上的迭代器（已通过）
+    // TODO: 获得SST中的指定key的位置上的迭代器（已通过）
     if (!m_sst) {
         m_block_it = nullptr;
         return;
@@ -158,7 +158,7 @@ std::string SstIterator::value() {
 }
 
 BaseIterator& SstIterator::operator++() {
-    // TODO: Lab 3.6 实现SstIterator迭代器自增（已通过）
+    // TODO:实现SstIterator迭代器自增
     if (!m_block_it) {  // 添加空指针检查
         return *this;
     }
@@ -179,7 +179,7 @@ BaseIterator& SstIterator::operator++() {
 }
 
 bool SstIterator::operator==(const BaseIterator& other) const {
-    // TODO: Lab 3.6 实现迭代器比较（已通过）
+    // TODO: 实现迭代器比较
     if (other.get_type() != IteratorType::SstIterator) {
         return false;
     }
@@ -200,12 +200,12 @@ bool SstIterator::operator==(const BaseIterator& other) const {
 }
 
 bool SstIterator::operator!=(const BaseIterator& other) const {
-    //  TODO: Lab 3.6 实现迭代器比较（已通过）
+    //  TODO:实现迭代器比较
     return !(*this == other);
 }
 
 SstIterator::value_type SstIterator::operator*() const {
-    //  TODO: Lab 3.6 实现迭代器解引用（已通过）
+    //  TODO: 实现迭代器解引用
     if (!m_block_it) {
         throw std::runtime_error("Iterator is invalid");
     }
@@ -250,7 +250,7 @@ uint64_t SstIterator::get_cur_tranc_id() const {
 }
 
 // merge_sst_iterator(): 根据一组sst的SstItertor，进行合并，得到一个大根堆区间begin和end
-// !这里其实没有真的做去重操作，而是将去重操作推迟到实际通过HeapIterator访问元素时才进行
+// 这里将去重操作推迟到实际通过HeapIterator访问元素时才进行
 std::pair<HeapIterator, HeapIterator> SstIterator::merge_sst_iterator(
     std::vector<SstIterator> iter_vec, uint64_t tranc_id, bool keep_all_versions) {
     if (iter_vec.empty()) {

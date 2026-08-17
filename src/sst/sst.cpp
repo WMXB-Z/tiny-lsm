@@ -17,8 +17,7 @@ namespace tiny_lsm {
 // Magic byte identifying a WiscKey SST footer
 static constexpr uint8_t WISCKEY_MAGIC = 0x4B;
 // Old footer size (24 bytes)
-static constexpr size_t OLD_FOOTER_SIZE =
-    sizeof(uint32_t) * 2 + sizeof(uint64_t) * 2;
+static constexpr size_t OLD_FOOTER_SIZE = sizeof(uint32_t) * 2 + sizeof(uint64_t) * 2;
 // New WiscKey footer size (26 bytes)
 static constexpr size_t WISCKEY_FOOTER_SIZE = OLD_FOOTER_SIZE + 2;
 
@@ -34,20 +33,19 @@ static constexpr size_t WISCKEY_FOOTER_SIZE = OLD_FOOTER_SIZE + 2;
 //   ├─ 读取并解码Meta Section，并记录至SST中
 //   ├─ 第一个key和最后一个key，记录至sst中
 //   └─ 返回这个内存实例SST的指针
-std::shared_ptr<SST> SST::open(size_t sst_id, FileObj file,
-                               std::shared_ptr<BlockCache> block_cache,
+std::shared_ptr<SST> SST::open(size_t sst_id, FileObj file, std::shared_ptr<BlockCache> block_cache,
                                std::shared_ptr<VLog> vlog) {
     // TODO: 打开一个SST文件, 返回一个描述类
     // [data blocks][meta block][bloom filter][footer]对该SST文件，只读取meta block+bloom filter+footer
     // ? 步骤:
-    // ?   0. 检测文件末尾 magic byte 判断是否为 WiscKey 格式 (WISCKEY_MAGIC = 0x4B) 
-    // ?        footer 共 24 字节 (老格式) 或 26 字节 (WiscKey, 末尾多storage_mode + magic) 
-    // ?   1. 从文件末尾读取 footer: meta_block_offset,bloom_offset, min_tranc_id, max_tranc_id 
-    // ?      如为 WiscKey 格式,还需读取 storage_mode_ 
-    // ?   2. 读取并解码 Bloom Filter (bloom_offset ~ meta_block_offset 之间) 
-    // ?   3. 读取并解码元数据块 (meta_block_offset ~ bloom_offset 之间) 
-    // ?      调用 BlockMeta::decode_meta_from_slice 
-    // ?   4.设置 first_key 和 last_key 
+    // ?   0. 检测文件末尾 magic byte 判断是否为 WiscKey 格式 (WISCKEY_MAGIC = 0x4B)
+    // ?        footer 共 24 字节 (老格式) 或 26 字节 (WiscKey, 末尾多storage_mode + magic)
+    // ?   1. 从文件末尾读取 footer: meta_block_offset,bloom_offset, min_tranc_id, max_tranc_id
+    // ?      如为 WiscKey 格式,还需读取 storage_mode_
+    // ?   2. 读取并解码 Bloom Filter (bloom_offset ~ meta_block_offset 之间)
+    // ?   3. 读取并解码元数据块 (meta_block_offset ~ bloom_offset 之间)
+    // ?      调用 BlockMeta::decode_meta_from_slice
+    // ?   4.设置 first_key 和 last_key
     // ?   注: vlog 用于 WiscKey 模式下的 value 读取,直接赋值给 sst->vlog_
     auto sst = std::make_shared<SST>();
     sst->sst_id = sst_id;
@@ -63,8 +61,7 @@ std::shared_ptr<SST> SST::open(size_t sst_id, FileObj file,
 
     // 判断是否为 WiscKey 格式：最后一个字节（魔术字节）为0x4B && file大小超过26B
     size_t footer_size = OLD_FOOTER_SIZE;
-    if (file_size >= WISCKEY_FOOTER_SIZE &&
-        sst->file.read_uint8(file_size - 1) == WISCKEY_MAGIC) {
+    if (file_size >= WISCKEY_FOOTER_SIZE && sst->file.read_uint8(file_size - 1) == WISCKEY_MAGIC) {
         // 从文件尾部（按 WiscKey footer 格式）尝试读取 meta_offset
         uint32_t candidate_meta_offset = 0;
         auto candidate_bytes = sst->file.read_to_slice(file_size - WISCKEY_FOOTER_SIZE, sizeof(uint32_t));
@@ -79,25 +76,21 @@ std::shared_ptr<SST> SST::open(size_t sst_id, FileObj file,
     }
 
     // 0. 读取最大和最小的事务id
-    auto max_tranc_id = sst->file.read_to_slice(
-        file_size - footer_size + OLD_FOOTER_SIZE - sizeof(uint64_t),
-        sizeof(uint64_t));
+    auto max_tranc_id =
+        sst->file.read_to_slice(file_size - footer_size + OLD_FOOTER_SIZE - sizeof(uint64_t), sizeof(uint64_t));
     memcpy(&sst->max_tranc_id_, max_tranc_id.data(), sizeof(uint64_t));
 
-    auto min_tranc_id = sst->file.read_to_slice(
-        file_size - footer_size + OLD_FOOTER_SIZE - sizeof(uint64_t) * 2,
-        sizeof(uint64_t));
+    auto min_tranc_id =
+        sst->file.read_to_slice(file_size - footer_size + OLD_FOOTER_SIZE - sizeof(uint64_t) * 2, sizeof(uint64_t));
     memcpy(&sst->min_tranc_id_, min_tranc_id.data(), sizeof(uint64_t));
 
     // 1. 读取BloomSection的偏移量、Meta Section的偏移量记录至SST中
     auto bloom_offset_bytes = sst->file.read_to_slice(
-        file_size - footer_size + OLD_FOOTER_SIZE - sizeof(uint64_t) * 2 - sizeof(uint32_t),
-        sizeof(uint32_t));
+        file_size - footer_size + OLD_FOOTER_SIZE - sizeof(uint64_t) * 2 - sizeof(uint32_t), sizeof(uint32_t));
     memcpy(&sst->bloom_offset, bloom_offset_bytes.data(), sizeof(uint32_t));
 
     auto meta_offset_bytes = sst->file.read_to_slice(
-        file_size - footer_size + OLD_FOOTER_SIZE - sizeof(uint64_t) * 2 - sizeof(uint32_t) * 2,
-        sizeof(uint32_t));
+        file_size - footer_size + OLD_FOOTER_SIZE - sizeof(uint64_t) * 2 - sizeof(uint32_t) * 2, sizeof(uint32_t));
     memcpy(&sst->meta_block_offset, meta_offset_bytes.data(), sizeof(uint32_t));
 
     // 2. 读取 bloom filter，并记录SST中
@@ -124,7 +117,6 @@ std::shared_ptr<SST> SST::open(size_t sst_id, FileObj file,
     return sst;
 }
 
-
 std::shared_ptr<Block> SST::read_block(int64_t block_idx) {
     // TODO: 根据 block 的 id 读取一个 Block
     // ? 先从 block_cache 查找; 未命中则计算该 block 的偏移和大小
@@ -145,7 +137,7 @@ std::shared_ptr<Block> SST::read_block(int64_t block_idx) {
         throw std::runtime_error("Block cache not set");
     }
 
-    const auto &meta = block_meta_vec[block_idx];
+    const auto& meta = block_meta_vec[block_idx];
     size_t block_size;
 
     // 计算block大小
@@ -185,14 +177,14 @@ int64_t SST::find_block_idx(const std::string& key) {
 
     while (left < right) {
         int64_t mid = (left + right) / 2;
-        const auto &meta = block_meta_vec[mid];
+        const auto& meta = block_meta_vec[mid];
 
         if (key < meta.first_key) {
-        right = mid;
+            right = mid;
         } else if (key > meta.last_key) {
-        left = mid + 1;
+            left = mid + 1;
         } else {
-        return mid;
+            return mid;
         }
     }
 
@@ -201,7 +193,7 @@ int64_t SST::find_block_idx(const std::string& key) {
         return -1;
     }
     return left;
-    }
+}
 
 SstIterator SST::get(const std::string& key, uint64_t tranc_id) {
     // TODO: 根据查询 key 返回一个SstIterator迭代器
@@ -220,18 +212,17 @@ SstIterator SST::get(const std::string& key, uint64_t tranc_id) {
     return SstIterator(shared_from_this(), key, tranc_id);
 }
 
-
 // 解析出Entry中的真实value
 std::string SST::resolve_value(const std::string& raw_value) const {
-    // WiscKey 模式下: 
+    // WiscKey 模式下:
     // raw_value 是 12 字节的 vlog 引用 [offset:8][size:4]
     // 普通模式下直接返回 raw_value
     if (storage_mode_ == 0 || raw_value.empty()) {
         return raw_value;
     }
     // 判断是否是小value，是的话，就直接返回即可
-    // 因为这里设计的是：指针大小(8B)+偏移量(4B)，如果连12字节都没有，则说明它是小字节 
-    if (raw_value.size() < 12) {    
+    // 因为这里设计的是：指针大小(8B)+偏移量(4B)，如果连12字节都没有，则说明它是小字节
+    if (raw_value.size() < 12) {
         return raw_value;
     }
     uint64_t off = 0;
@@ -239,30 +230,27 @@ std::string SST::resolve_value(const std::string& raw_value) const {
     memcpy(&off, raw_value.data(), sizeof(uint64_t));
     memcpy(&sz, raw_value.data() + sizeof(uint64_t), sizeof(uint32_t));
     if (!vlog_) {
-        throw std::runtime_error(
-            "SST::resolve_value: vlog is null for WiscKey SST");
+        throw std::runtime_error("SST::resolve_value: vlog is null for WiscKey SST");
     }
     // 大字节value会通过vlog_实现访问
     return vlog_->read_value(off, sz);
 }
 
-
 // keep_all_versions=false 时只保留每个 key 的最新版本（事务可见版本）
 // keep_all_versions=true 时用于 compact，保留全部历史版本
 SstIterator SST::begin(uint64_t tranc_id, bool keep_all_versions) {
     // TODO: 返回起始位置迭代器
-      return SstIterator(shared_from_this(), tranc_id, keep_all_versions);
+    return SstIterator(shared_from_this(), tranc_id, keep_all_versions);
 }
 
 SstIterator SST::end() {
     // TODO: 返回终止位置迭代器
     // ? 构造一个 SstIterator 并将 m_block_idx 设为 block_meta_vec.size(), m_block_it 设为 nullptr
     SstIterator res(shared_from_this(), 0);
-    res.m_block_idx = block_meta_vec.size();  //表示无效Block索引
+    res.m_block_idx = block_meta_vec.size();  // 表示无效Block索引
     res.m_block_it = nullptr;
     return res;
 }
-
 
 // **************************************************
 // SSTBuilder
@@ -271,9 +259,8 @@ SstIterator SST::end() {
 SSTBuilder::SSTBuilder(size_t block_size, bool has_bloom) : block(block_size) {
     // 初始化第一个block
     if (has_bloom) {
-        bloom_filter = std::make_shared<BloomFilter>(
-            TomlConfig::getInstance().getBloomFilterExpectedSize(),
-            TomlConfig::getInstance().getBloomFilterExpectedErrorRate());
+        bloom_filter = std::make_shared<BloomFilter>(TomlConfig::getInstance().getBloomFilterExpectedSize(),
+                                                     TomlConfig::getInstance().getBloomFilterExpectedErrorRate());
     }
     block_meta_vec.clear();
     data.clear();
@@ -281,31 +268,25 @@ SSTBuilder::SSTBuilder(size_t block_size, bool has_bloom) : block(block_size) {
     last_key.clear();
 }
 
-SSTBuilder::SSTBuilder(size_t block_size, bool has_bloom,
-                       std::shared_ptr<VLog> vlog, size_t wisckey_threshold)
-    : block(block_size),
-      vlog_(std::move(vlog)),
-      wisckey_threshold_(wisckey_threshold),
-      storage_mode_(1) {
+SSTBuilder::SSTBuilder(size_t block_size, bool has_bloom, std::shared_ptr<VLog> vlog, size_t wisckey_threshold)
+    : block(block_size), vlog_(std::move(vlog)), wisckey_threshold_(wisckey_threshold), storage_mode_(1) {
     // WiscKey 模式构造函数: vlog 用于大 value 分离存储
     if (has_bloom) {
-        bloom_filter = std::make_shared<BloomFilter>(
-            TomlConfig::getInstance().getBloomFilterExpectedSize(),
-            TomlConfig::getInstance().getBloomFilterExpectedErrorRate());
+        bloom_filter = std::make_shared<BloomFilter>(TomlConfig::getInstance().getBloomFilterExpectedSize(),
+                                                     TomlConfig::getInstance().getBloomFilterExpectedErrorRate());
     }
     block_meta_vec.clear();
     data.clear();
     first_key.clear();
     last_key.clear();
 }
-
 
 // add()：不断往当前 block 塞 KV，并 判断是否需要切块
 //   ├─ 尝试往当前 block中写数据
 //   ├─ 如果 block 无法写入（例如写满了、同key无法放入一个block等） → finish_block()
 //   │       ├─ block 编码进 data数组
 //   │       ├─ 记录该block的meta信息 至 block_meta_vec数组
-//   │       └─ 开启新 block 
+//   │       └─ 开启新 block
 //   ├─ 写入数据
 //   └─ 维护SSTBuilder的一些控制信息（first_key / last_key、bloom filter、tranc_id 范围）
 void SSTBuilder::add(const std::string& key, const std::string& value, uint64_t tranc_id) {
@@ -313,10 +294,10 @@ void SSTBuilder::add(const std::string& key, const std::string& value, uint64_t 
     // ? 记录 first_key (第一次调用时)
     // ? 向 bloom_filter 中 add key
     // ? 更新 max_tranc_id_ / min_tranc_id_
-    // ? WiscKey 模式下: 若 value 非空且超过 wisckey_threshold_, 将 value 写入vlog 
+    // ? WiscKey 模式下: 若 value 非空且超过 wisckey_threshold_, 将 value 写入vlog
     // ? 并将 vlog 引用 [offset:8][size:4] 作为 actual_value
-    // ? 尝试向 block 添加 entry; 若返回 false (block满) 先调用 finish_block() 再添加 
-    // ? 注意: 相同 key 必须在同一个 block 中 (force_write = key == last_key) 
+    // ? 尝试向 block 添加 entry; 若返回 false (block满) 先调用 finish_block() 再添加
+    // ? 注意: 相同 key 必须在同一个 block 中 (force_write = key == last_key)
     // ? 更新 last_key
 
     // 记录第一个key
@@ -335,14 +316,12 @@ void SSTBuilder::add(const std::string& key, const std::string& value, uint64_t 
 
     // WiscKey: 一种优化机制，SST中只存小value，将“大value”从会分离出去
     // 即如果value太大，就不直接存进SST，而是存到vlog，然后在SST里只保存一个“指针（offset + size）”。
-    const std::string *actual_value = &value;
+    const std::string* actual_value = &value;
     std::string vlog_ref;
 
     // !判断是否启用 WiscKey + 是否是大 value，如果是大字节value，
     // 则会将实际的value追加至vlog_文件中，sst文件中仅保留它在vlog中的偏移地址(8B)和字节大小(4B)
-    if (storage_mode_ == 1 && vlog_ && !value.empty() 
-        && wisckey_threshold_ > 0 
-        && value.size() >= wisckey_threshold_) {
+    if (storage_mode_ == 1 && vlog_ && !value.empty() && wisckey_threshold_ > 0 && value.size() >= wisckey_threshold_) {
         uint64_t offset = vlog_->append(key, value);
         vlog_ref.resize(sizeof(uint64_t) + sizeof(uint32_t));
         uint32_t val_size = static_cast<uint32_t>(value.size());
@@ -360,11 +339,11 @@ void SSTBuilder::add(const std::string& key, const std::string& value, uint64_t 
         return;
     }
 
-    finish_block(); // 将当前 block 写入 data数组中
+    finish_block();  // 将当前 block 写入 data数组中
 
     block.add_entry(key, *actual_value, tranc_id, false);
     first_key = key;
-    last_key = key; // 更新最后一个key
+    last_key = key;  // 更新最后一个key
 }
 
 size_t SSTBuilder::real_size() const { return data.size() + block.cur_size(); }
@@ -377,15 +356,14 @@ void SSTBuilder::finish_block() {
     // ? 然后重置 block 为新的空 Block
     // ? block_meta_vec 记录: (当前data起始偏移, first_key, last_key)
 
-    auto old_block = std::move(this->block);    //触发移动语义，this->block中部分内容被置空
-    auto encoded_block = old_block.encode(); 
+    auto old_block = std::move(this->block);  // 触发移动语义，this->block中部分内容被置空
+    auto encoded_block = old_block.encode();
 
     block_meta_vec.emplace_back(data.size(), first_key, last_key);
     // 预分配空间并添加数据
     // data.reserve(data.size() + encoded_block.size());
     data.insert(data.end(), encoded_block.begin(), encoded_block.end());
 }
-
 
 // build()：把所有 block + meta + footer 拼成一个完整 SST 文件
 //   ├─ 如果还有没写完的 block → finish_block()
@@ -399,7 +377,8 @@ void SSTBuilder::finish_block() {
 //   │       └─ 添加其他控制信息
 //   ├─ file落盘生成实际的FileObj file
 //   └─ 根据SSTBuilder中的信息构建一个SST实例
-std::shared_ptr<SST> SSTBuilder::build(size_t sst_id, const std::string& path, std::shared_ptr<BlockCache> block_cache) {
+std::shared_ptr<SST> SSTBuilder::build(size_t sst_id, const std::string& path,
+                                       std::shared_ptr<BlockCache> block_cache) {
     // TODO: 构建一个SST
     // ? 1. 若 block 非空则调用 finish_block()
     // ? 2. 若 block_meta_vec 为空则抛出异常
@@ -422,7 +401,7 @@ std::shared_ptr<SST> SSTBuilder::build(size_t sst_id, const std::string& path, s
     }
 
     // 编码元数据块(block_meta_vec数组-->meta section对应的metadata)
-    std::vector<uint8_t> meta_block;    // 即metadata
+    std::vector<uint8_t> meta_block;  // 即metadata
     BlockMeta::encode_meta_to_slice(block_meta_vec, meta_block);
 
     // 计算元数据块的偏移量
@@ -450,7 +429,7 @@ std::shared_ptr<SST> SSTBuilder::build(size_t sst_id, const std::string& path, s
     size_t extra_len = OLD_FOOTER_SIZE + (is_wisckey ? 2 : 0);
     file_content.resize(file_content.size() + extra_len);
 
-    uint8_t *footer_base = file_content.data() + file_content.size() - extra_len;
+    uint8_t* footer_base = file_content.data() + file_content.size() - extra_len;
 
     // 2) 添加元数据块偏移量
     memcpy(footer_base, &meta_offset, sizeof(uint32_t));

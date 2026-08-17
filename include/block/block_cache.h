@@ -16,8 +16,8 @@ namespace tiny_lsm {
 
 // 定义缓存项
 struct CacheItem {
-    int sst_id;
-    int block_id;
+    int sst_id; //该Block所属的SST的id
+    int block_id;  //该Block在所属SST中的索引
     std::shared_ptr<Block> cache_block; //data block块
     uint64_t access_count;  // 访问时间戳
 };
@@ -64,12 +64,11 @@ private:
     std::list<CacheItem> cache_list_greater_k;
     std::list<CacheItem> cache_list_less_k;
 
-    // 哈希表索引缓存项(sst_id, block_id)映射为std::list<CacheItem>::iterator
+    // 哈希表索引缓存项(sst_id, block_id)---映射-->std::list<CacheItem>::iterator
     // map 用来 O(1) 查找
     // list 用来 O(1) 调整 LRU 顺序。
     // 通过找到的迭代器，.erase(迭代器)，能实现对List操作的O(1)
-    std::unordered_map<std::pair<int, int>, std::list<CacheItem>::iterator,
-                       pair_hash, pair_equal> cache_map_;
+    std::unordered_map<std::pair<int, int>, std::list<CacheItem>::iterator, pair_hash, pair_equal> cache_map_;
 
     // 更新缓存项的访问时间
     void update_access_count(std::list<CacheItem>::iterator it);

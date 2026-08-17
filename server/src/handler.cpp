@@ -25,7 +25,8 @@ const std::unordered_map<std::string, OPS> &getOpsMap() {
       {"zrank", OPS::ZRANK},     {"zrem", OPS::ZREM},
       {"zscore", OPS::ZSCORE},   {"sadd", OPS::SADD},
       {"scard", OPS::SCARD},     {"smembers", OPS::SMEMBERS},
-      {"srem", OPS::SREM},       {"sismember", OPS::SISMEMBER}};
+      {"srem", OPS::SREM},       {"sismember", OPS::SISMEMBER},
+      {"config", OPS::CONFIG}};
   return opsMap;
 }
 
@@ -45,6 +46,28 @@ std::string save_handler(RedisWrapper &engine) {
   // 这里数据库中的flush是指刷盘的意思, 和redis中的flush含义不同
   engine.flushall();
   return "+OK\r\n";
+}
+
+// CONFIG 命令：主要为了兼容 redis-benchmark 等客户端启动时的配置探测
+std::string config_handler(std::vector<std::string> &args,
+                           RedisWrapper &engine) {
+  if (args.size() < 2) {
+    return "-ERR wrong number of arguments for 'CONFIG' command\r\n";
+  }
+  std::string sub = toLower(args[1]);
+  if (sub == "get") {
+    // 返回单个配置项。save 给一个合法的默认值，其余配置给 "0"
+    std::string key = (args.size() >= 3) ? args[2] : "save";
+    std::string val =
+        (toLower(key) == "save") ? "3600 1 300 100 60 10000" : "0";
+    std::string resp = "*2\r\n$" + std::to_string(key.size()) + "\r\n" + key +
+                       "\r\n$" + std::to_string(val.size()) + "\r\n" + val +
+                       "\r\n";
+    return resp;
+  } else if (sub == "set") {
+    return "+OK\r\n";
+  }
+  return "-ERR unknown CONFIG subcommand\r\n";
 }
 
 // **************************** 基础操作 ****************************

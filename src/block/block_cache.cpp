@@ -29,7 +29,7 @@ BlockCache::BlockCache(size_t capacity, size_t k) : capacity_(capacity), k_(k) {
 BlockCache::~BlockCache() = default;
 
 std::shared_ptr<Block> BlockCache::get(int sst_id, int block_id) {
-    // TODO: Lab 4.8 在缓存池中查询一个 Block
+    // TODO: 在缓存池中查询一个 Block
     std::lock_guard<std::mutex> lock(mutex_);
     ++total_requests_;  // 增加总请求数
     auto key = std::make_pair(sst_id, block_id);
@@ -52,15 +52,14 @@ std::shared_ptr<Block> BlockCache::get(int sst_id, int block_id) {
 //   └─ 放入新元素，更新控制信息map
 
 void BlockCache::put(int sst_id, int block_id, std::shared_ptr<Block> block) {
-    // TODO: Lab 4.8 在Block缓存池中插入一个 Block（已通过）
+    // TODO: 在Block缓存池中插入一个 Block
     std::lock_guard<std::mutex> lock(mutex_);
     auto key = std::make_pair(sst_id, block_id);
     auto it = cache_map_.find(key);
 
     if (it != cache_map_.end()) {
         // 更新已有缓存项
-        // ! 照理说 Block 类的数据是不可变的，这里的更新分支应该不会存在,
-        // 只是debug用
+        // 照理说 Block 类的数据是不可变的，这里的更新分支应该不会存在
         it->second->cache_block = block;
         update_access_count(it->second);
     } else {
@@ -94,7 +93,7 @@ double BlockCache::hit_rate() const {
 }
 
 void BlockCache::update_access_count(std::list<CacheItem>::iterator it) {
-    // TODO: Lab 4.8 更新Block缓存池的统计信息（已通过）
+    // TODO:更新Block缓存池的统计信息
     ++it->access_count;
     if (it->access_count < k_) {
         // 这表示更新后仍然位于cache_list_less_k，故只需要重新置于cache_list_less_k头部即可

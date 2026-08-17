@@ -58,7 +58,7 @@ int SkipList::random_level() {
     // ? - 每次有50%的概率增加一层
     // ? - 确保层数分布为：第1层100%，第2层50%，第3层25%，以此类推
     // ? - 层数范围限制在[1, max_level]之间，避免浪费内存
-    // TODO: Lab1.1 任务：插入时随机为这一次操作确定其最高连接的链表层数(y)
+    // TODO: 插入时随机为这一次操作确定其最高连接的链表层数(y)
     int level_num = 1;
     while ((std::rand() & 0x01) == 1 && level_num < max_level) {
         ++level_num;
@@ -70,7 +70,7 @@ int SkipList::random_level() {
 void SkipList::put(const std::string& key, const std::string& value, uint64_t tranc_id) {
     // 用spdlog以 trace（最详细级别）打印一条格式化日志
     spdlog::trace("SkipList--put({}, {}, {})", key, value, tranc_id);
-    // TODO: Lab1.1 任务：实现插入或更新键值对(个人实现已通过)
+    // TODO:实现插入或更新键值对
     // ? Hint: 你需要保证不同`Level`的步长从底层到高层逐渐增加
     // ? 你可能需要使用到`random_level`函数以确定层数,其注释中为你提供一种思路
     // ? tranc_id 为事务id, 直接将其传递到 SkipListNode 的构造函数中即可
@@ -137,7 +137,7 @@ void SkipList::put(const std::string& key, const std::string& value, uint64_t tr
 // 查找键值对
 SkipListIterator SkipList::get(const std::string& key, uint64_t tranc_id) {
     spdlog::trace("SkipList--get({}) called", key);
-    // TODO: Lab1.1 任务：实现查找键值对(个人实现通过！)
+    // TODO: 实现查找键值对
     // ? 从最高层开始向下查找, 最终在底层确认 key 是否存在
     // ? 若 tranc_id == 0, 直接比较 key 返回; 否则需满足事务可见性 (tranc_id_<= tranc_id)
     auto tmp = head;

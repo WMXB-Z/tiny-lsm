@@ -47,6 +47,8 @@ enum class OPS {
   SISMEMBER,
   SCARD,
   SMEMBERS,
+  // 配置操作
+  CONFIG,
   // 其他
   UNKNOWN,
 };
@@ -55,6 +57,10 @@ OPS string2Ops(const std::string &opStr);
 
 std::string flushall_handler(RedisWrapper &engine);
 std::string save_handler(RedisWrapper &engine);
+
+// 配置操作
+std::string config_handler(std::vector<std::string> &args,
+                           RedisWrapper &engine);
 
 // 基础操作
 std::string set_handler(std::vector<std::string> &args, RedisWrapper &engine);

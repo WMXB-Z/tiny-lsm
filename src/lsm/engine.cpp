@@ -754,11 +754,9 @@ LSMEngine::full_l0_l1_compact(std::vector<size_t> &l0_ids,
         l1_ssts.push_back(ssts[id]);
     }
     // l0 的sst之间的key有重叠, 需要合并得到大根堆的HeapIterator
-    auto [l0_begin, l0_end] =
-        SstIterator::merge_sst_iterator(l0_iters, 0, keep_all_versions_);
+    auto [l0_begin, l0_end] = SstIterator::merge_sst_iterator(l0_iters, 0, keep_all_versions_);
 
-    std::shared_ptr<HeapIterator> l0_begin_ptr =
-        std::make_shared<HeapIterator>(l0_begin);
+    std::shared_ptr<HeapIterator> l0_begin_ptr = std::make_shared<HeapIterator>(l0_begin);
     // *l0_begin_ptr = l0_begin;
 
     std::shared_ptr<ConcactIterator> old_l1_begin_ptr =
@@ -922,7 +920,8 @@ LSM::~LSM() {
 }
 
 std::optional<std::string> LSM::get(const std::string &key) {
-    auto tranc_id = tran_manager_->get_next_global_seq();
+    // auto tranc_id = tran_manager_->get_next_global_seq();
+    auto tranc_id = tran_manager_->get_global_seq();
     auto res = engine->get(key, tranc_id);
 
     if (res.has_value()) {
@@ -934,7 +933,8 @@ std::optional<std::string> LSM::get(const std::string &key) {
 std::vector<std::pair<std::string, std::optional<std::string>>>
 LSM::get_batch(const std::vector<std::string> &keys) {
     // 1. 获取事务ID
-    auto tranc_id = tran_manager_->get_next_global_seq();
+    // auto tranc_id = tran_manager_->get_next_global_seq();
+    auto tranc_id = tran_manager_->get_global_seq();
 
     // 2. 调用 engine 的批量查询接口
     auto batch_results = engine->get_batch(keys, tranc_id);
