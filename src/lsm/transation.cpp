@@ -29,13 +29,9 @@ inline std::string isolation_level_to_string(const IsolationLevel& level) {
 }
 
 // *********************** TranContext 事务句柄 ***********************
-TranContext::TranContext(uint64_t tranc_id, std::shared_ptr<LSMEngine> engine,
-                         std::shared_ptr<TranManager> tranManager,
+TranContext::TranContext(uint64_t tranc_id, std::shared_ptr<LSMEngine> engine, std::shared_ptr<TranManager> tranManager,
                          const enum IsolationLevel& isolation_level)
-    : tranc_id_(tranc_id),
-      engine_(std::move(engine)),
-      tranManager_(tranManager),
-      isolation_level_(isolation_level) {
+    : tranc_id_(tranc_id), engine_(std::move(engine)), tranManager_(tranManager), isolation_level_(isolation_level) {
     // TODO: 事务句柄初始化
     // "创建操作"的记录对象，放入操作记录数组中
     operations.emplace_back(Record::createRecord(tranc_id_));
@@ -43,7 +39,7 @@ TranContext::TranContext(uint64_t tranc_id, std::shared_ptr<LSMEngine> engine,
 
 // put(): 完成事务中的put操作
 //   ├─ 创建Record对象，并记录
-//   └─ 暂存k-v至temp_map_中，等待事务的commit/abort
+//   └─ 暂存k-v至wirte_map_中，等待事务的commit/abort
 void TranContext::put(const std::string& key, const std::string& value) {
     // TODO: put 实现
     spdlog::trace(
@@ -56,28 +52,26 @@ void TranContext::put(const std::string& key, const std::string& value) {
     // 所有隔离级别都需要先写入 operations 中
     operations.emplace_back(Record::putRecord(this->tranc_id_, key, value));
 
-    // 2 其他隔离级别需要 暂存到 temp_map_ 中, 统一提交后才在数据库中生效
-    temp_map_[key] = value;
+    // 2 其他隔离级别需要 暂存到 wirte_map_ 中, 统一提交后才在数据库中生效
+    wirte_map_[key] = value;
 
-    spdlog::trace("TranContext--{}: put({}, {}) stored in temp map",
-                  isolation_level_to_string(isolation_level_), key, value);
+    spdlog::trace("TranContext--{}: put({}, {}) stored in temp map", isolation_level_to_string(isolation_level_), key,
+                  value);
 }
 
 // 实现上与put完全相同
 void TranContext::remove(const std::string& key) {
     // TODO: remove 实现
-    spdlog::trace("TranContext--remove({}) called, tranc_id={}", key,
-                  tranc_id_);
+    spdlog::trace("TranContext--remove({}) called, tranc_id={}", key, tranc_id_);
 
     auto isolation_level = get_isolation_level();
 
     // 所有隔离级别都需要先写入 operations 中
     operations.emplace_back(Record::deleteRecord(this->tranc_id_, key));
 
-    // 2 其他隔离级别需要 暂存到 temp_map_ 中, 统一提交后才在数据库中生效
-    temp_map_[key] = "";
-    spdlog::trace("TranContext--{}: remove({}) stored in temp map",
-                  isolation_level_to_string(isolation_level_), key);
+    // 2 其他隔离级别需要 暂存到 wirte_map_ 中, 统一提交后才在数据库中生效
+    wirte_map_[key] = "";
+    spdlog::trace("TranContext--{}: remove({}) stored in temp map", isolation_level_to_string(isolation_level_), key);
 }
 
 std::optional<std::string> TranContext::get(const std::string& key) {
@@ -86,11 +80,14 @@ std::optional<std::string> TranContext::get(const std::string& key) {
     auto isolation_level = get_isolation_level();
 
     // 1 所有隔离级别先就近在当前操作的临时缓存中查找
-    // 读已提交不保留读取的结果，故会跳过
-    if (temp_map_.find(key) != temp_map_.end()) {
-        spdlog::trace("TranContext--{}: get({}) found in temp map",
-                      isolation_level_to_string(isolation_level), key);
-        return temp_map_[key];
+    if (wirte_map_.find(key) != wirte_map_.end()) {
+        spdlog::trace("TranContext--{}: get({}) found in temp map", isolation_level_to_string(isolation_level), key);
+        return wirte_map_[key];
+    }
+    // "读已提交"级别中不缓存读取的结果，这里会故会跳过
+    if (read_map_.find(key) != read_map_.end()) {
+        spdlog::trace("TranContext--{}: get({}) found in temp map", isolation_level_to_string(isolation_level), key);
+        return read_map_[key]->first;
     }
 
     // 2 为查询成功，说明此处是第一次查询，使用 engine 查询
@@ -98,8 +95,7 @@ std::optional<std::string> TranContext::get(const std::string& key) {
     if (isolation_level == IsolationLevel::READ_OP_COMMITTED) {
         // 2.2 如果隔离级别是 READ_OP_COMMITTED, 使用 engine 查询时判断 tranc_id
         query = engine_->get(key, 0);
-    } else if(isolation_level == IsolationLevel::REPEATABLE_READ ||
-            isolation_level == IsolationLevel::SERIALIZABLE) {
+    } else if (isolation_level == IsolationLevel::REPEATABLE_READ || isolation_level == IsolationLevel::SERIALIZABLE) {
         // 2.2 如果隔离级别是 SERIALIZABLE 或 REPEATABLE_READ, 第一次使用 engine
         // 查询后还需要将值暂存至上下文中
         // fix bug：事务创建时id的大小并不能决定提交的时间次序，我的做法是：在事务提交时重新分配id
@@ -109,16 +105,13 @@ std::optional<std::string> TranContext::get(const std::string& key) {
     }
 
     if (query.has_value()) {
-        spdlog::trace("TranContext--{}: get({}) returned value={}",
-                      isolation_level_to_string(isolation_level), key,
+        spdlog::trace("TranContext--{}: get({}) returned value={}", isolation_level_to_string(isolation_level), key,
                       query->first);
     } else {
-        spdlog::trace("TranContext--{}: get({}) returned no value",
-                      isolation_level_to_string(isolation_level), key);
+        spdlog::trace("TranContext--{}: get({}) returned no value", isolation_level_to_string(isolation_level), key);
     }
     return query.has_value() ? std::make_optional(query->first) : std::nullopt;
 }
-
 
 // commit：事务提交时要冲突检测, 如果无冲突且WAL持久化成功, 返回true，否则返回false
 //   ├─ Read-Write冲突检测(仅对RP和SE做，因为它们要求可重复读，不能基于过期数据做决策)
@@ -128,34 +121,31 @@ std::optional<std::string> TranContext::get(const std::string& key) {
 bool TranContext::commit(bool test_fail) {
     // TODO: commit 实现
     // 事务提交 = 逻辑上已经成功 + 满足持久性保证（写入了WAL）
-    spdlog::info("TranContext--commit(): Starting commit for transaction ID={}",
-                 tranc_id_);
+    spdlog::info("TranContext--commit(): Starting commit for transaction ID={}", tranc_id_);
 
     auto isolation_level = get_isolation_level();
     MemTable& memtable = engine_->memtable;
     auto tranManager = tranManager_.lock();
     // 1、Write-Write冲突检测（仅 RR / SERIALIZABLE）
-    // 检查“事务读过的数据，在事务执行期间有没有被别人改”，如果有返回false
-    // 检查：是否存在“另一个已提交事务”在snapshot 之后修改了这个 key
-    if (isolation_level == IsolationLevel::REPEATABLE_READ ||
-        isolation_level == IsolationLevel::SERIALIZABLE) {
+    // 判断“事务读过的数据，在事务执行期间有没有被别人改”，如果有返回false
+    // 即：检查是否存在“另一个已提交事务”在 当前快照的key之后 修改了它
+    if (isolation_level == IsolationLevel::REPEATABLE_READ || isolation_level == IsolationLevel::SERIALIZABLE) {
         std::unique_lock<std::shared_mutex> wlock1(memtable.cur_mtx);
         std::unique_lock<std::shared_mutex> wlock2(memtable.frozen_mtx);
         // TODO: 目前为检查冲突, 全局获取了读锁, 后续考虑性能优化方案
         std::shared_lock<std::shared_mutex> rlock3(engine_->ssts_mtx);
-        for (auto& [k, v] : temp_map_) {
+        for (auto& [k, v] : wirte_map_) {
             // memtable 冲突
-            auto res = memtable.get_(k, 0); //无锁get_
-            // !这个判断可见性的方式存在问题
+            auto res = memtable.get_(k, 0);  // 无锁get_
             if (res.is_valid() && res.get_tranc_id() > tranc_id_) {
                 spdlog::warn("TranContext--commit(): Conflict detected on key={}, aborting ID={}", k, tranc_id_);
                 isAborted = true;
                 // tranManager->add_ready_to_flush(tranc_id_, TransactionState::ABORTED);
                 return false;
             }
+
             // sst 冲突(避免非事务单步操作先于事务做了修改)
-            auto sst_res = engine_->sst_get_(k, 0); //无锁get_
-            // !这个判断可见性的方式存在问题
+            auto sst_res = engine_->sst_get_(k, 0);  // 无锁get_
             if (sst_res.has_value() && sst_res->second > tranc_id_) {
                 spdlog::warn("TranContext--commit(): SST conflict on key={}, aborting ID={}", k, tranc_id_);
                 isAborted = true;
@@ -167,55 +157,57 @@ bool TranContext::commit(bool test_fail) {
 
     // 2、Read-Write冲突检测（仅SERIALIZABLE）
     // ! 这里尚未完全实现可串行化的隔离级别
-    if (isolation_level == IsolationLevel::SERIALIZABLE) {
-        for (auto& [k, v] : read_map_) {
-            if(!v.has_value())
-                continue;
-            auto read_tran_id = v.value().second;
-            // memtable中检查冲突
-            auto res = memtable.get_(k, 0); //无锁get_
-            // !这个判断可见性的方式存在问题
-            if (res.is_valid() && res.get_tranc_id() > read_tran_id) {
-                spdlog::warn("RW Conflict: Conflict detected on key={}, ID={}, but read ID={}", 
-                    k, res.get_tranc_id(), read_tran_id);
-                isAborted = true;
-                // tranManager->add_ready_to_flush(tranc_id_, TransactionState::ABORTED);
-                return false;
-            }
-            // sst中冲突
-            auto sst_res = engine_->sst_get_(k, 0); //无锁get_
-            // !这个判断可见性的方式存在问题
-            if (sst_res.has_value() && sst_res->second > read_tran_id) {
-                spdlog::warn("RW Conflict: Conflict detected on key={}, ID={}, but read ID={}", 
-                    k,res.get_tranc_id(), read_tran_id);
-                isAborted = true;
-                // tranManager->add_ready_to_flush(tranc_id_, TransactionState::ABORTED);
-                return false;
-            }
-        }
-    }
+    // if (isolation_level == IsolationLevel::SERIALIZABLE) {
+    //     for (auto& [k, v] : read_map_) {
+    //         if(!v.has_value())
+    //             continue;
+    //         auto read_tran_id = v.value().second;
+    //         // memtable中检查冲突
+    //         auto res = memtable.get_(k, 0); //无锁get_
+
+    //         if (res.is_valid() && res.get_tranc_id() > read_tran_id) {
+    //             spdlog::warn("RW Conflict: Conflict detected on key={}, ID={}, but read ID={}",
+    //                 k, res.get_tranc_id(), read_tran_id);
+    //             isAborted = true;
+    //             // tranManager->add_ready_to_flush(tranc_id_, TransactionState::ABORTED);
+    //             return false;
+    //         }
+    //         // sst中冲突
+    //         auto sst_res = engine_->sst_get_(k, 0); //无锁get_
+
+    //         if (sst_res.has_value() && sst_res->second > read_tran_id) {
+    //             spdlog::warn("RW Conflict: Conflict detected on key={}, ID={}, but read ID={}",
+    //                 k,res.get_tranc_id(), read_tran_id);
+    //             isAborted = true;
+    //             // tranManager->add_ready_to_flush(tranc_id_, TransactionState::ABORTED);
+    //             return false;
+    //         }
+    //     }
+    // }
+
     // 2、对Record数组中的tranc_id进行改写，改写为commit_seq，写入 WAL
     auto committed_seq = tranManager->get_next_global_seq();
-    for(auto& record : operations){
+    for (auto& record : operations) {
         record.setTrancid(committed_seq);
     }
+    // 这个OperationType::OP_COMMIT;可以作为WAL中事务的分界
     operations.emplace_back(Record::commitRecord(committed_seq));
     if (!tranManager->write_to_wal(operations)) {
         spdlog::error("TranContext--commit(): WAL write failed, tran_ID={}, commitedseq={}", tranc_id_, committed_seq);
         throw std::runtime_error("write to wal failed");
     }
+    // 同时将当前已分配的事务id值、已经落的事务id值落盘到配置文件
+    tranManager->write_tranc_info_file();
 
-    // 3、写memtable，test_fail是用于测试中，故意让其写入memtable失败 
+    // 3、写memtable，test_fail是用于测试中，故意让其写入memtable失败
     {
         std::unique_lock<std::shared_mutex> wlock1(memtable.cur_mtx);
         std::unique_lock<std::shared_mutex> wlock2(memtable.frozen_mtx);
-        // 3、应用写入，从事务私有缓存WriteBatch（这里是temp_map_）中，将k-v逐个写入memtable
+        // 3、应用写入，从事务私有缓存WriteBatch（这里是wirte_map_）中，将k-v逐个写入memtable
         if (!test_fail) {
             // 这里是手动调用 memtable 的无锁版本的 put_, 因为之前手动加了写锁
-            for (auto& [k, v] : temp_map_) {
-                // memtable 必须与 WAL 使用相同的 committed_seq，
-                // 否则刷盘后的 max_flushed_seq 无法覆盖 WAL 中已提交的事务，
-                // 导致重启恢复时把已落盘数据全部重放一遍。
+            for (auto& [k, v] : wirte_map_) {
+                // 提交给memtable使用的版本号 与 提交给 WAL时使用的版本号相同
                 memtable.put_(k, v, committed_seq);
             }
         }
@@ -225,12 +217,12 @@ bool TranContext::commit(bool test_fail) {
     isCommited = true;
     // 在事务待刷入数组中，添加一条OP_COMMITTED事务
     // tranManager->add_ready_to_flush(committed_seq, TransactionState::OP_COMMITTED);
-    spdlog::info("TranContext--commit(): Committed successfully, tran_ID={}, commitedseq={}",  tranc_id_, committed_seq);
+    spdlog::info("TranContext--commit(): Committed successfully, tran_ID={}, commitedseq={}", tranc_id_, committed_seq);
     return true;
 }
 
 bool TranContext::abort() {
-    // TODO: abort（事务的回滚）实现 
+    // TODO: abort（事务的回滚）实现
     spdlog::info("TranContext--abort(): Aborting transaction ID={}", tranc_id_);
 
     auto isolation_level = get_isolation_level();
@@ -244,9 +236,7 @@ bool TranContext::abort() {
 }
 
 // 返回事务隔离级别
-enum IsolationLevel TranContext::get_isolation_level() {
-    return isolation_level_;
-}
+enum IsolationLevel TranContext::get_isolation_level() { return isolation_level_; }
 
 // *********************** TranManager ***********************
 TranManager::TranManager(std::string data_dir) : data_dir_(data_dir) {
@@ -267,8 +257,8 @@ TranManager::TranManager(std::string data_dir) : data_dir_(data_dir) {
 void TranManager::init_new_wal() {
     spdlog::info("TranManager--init_new_wal(): Cleaning up old WAL files");
     // TODO: 1 和 4096 应该统一用宏定义
-    // !注意：这里有问题，如果事务恢复后还未持久化，但这里又被删除，那将会发生数据丢失!
-    // !不应该主动删除，可以留给clearn线程清理
+    // 原先这里有问题，如果事务恢复后还未持久化，但这里又因截断被删除，那将会发生数据丢失!
+    // fix:不应该主动删除，可以留给clearn线程清理
     // for (const auto& entry : std::filesystem::directory_iterator(data_dir_)) {
     //     if (entry.path().filename().string().find("wal.") == 0) {
     //         std::filesystem::remove(entry.path());
@@ -276,14 +266,13 @@ void TranManager::init_new_wal() {
     // }
     wal = std::make_shared<WAL>(data_dir_, 128, get_max_flushed_seq(), 1, 4096);
     // flushedTrancIds_.clear();   // 清空"已落盘事务id"集合
-    // flushedTrancIds_.insert(global_seq_.load() - 1); 
+    // flushedTrancIds_.insert(global_seq_.load() - 1);
     spdlog::info("TranManager--init_new_wal(): New WAL initialized");
 }
 
-void TranManager::set_engine(std::shared_ptr<LSMEngine> engine) {
-    engine_ = std::move(engine);
-}
+void TranManager::set_engine(std::shared_ptr<LSMEngine> engine) { engine_ = std::move(engine); }
 
+// 正常结束时才会触发应该
 TranManager::~TranManager() { write_tranc_info_file(); }
 
 // 事务管理器关闭时，将本次事务执行后的状态信息写入事务信息文件中包括：
@@ -316,10 +305,11 @@ void TranManager::read_tranc_info_file() {
 }
 
 // 更新最大已刷盘seq
-void TranManager::update_max_flushed_seq(uint64_t tranc_id){
+void TranManager::update_max_flushed_seq(uint64_t tranc_id) {
     uint64_t cur = max_flushed_seq_.load();
     // cur 会被更新成最新值
-    while (cur < tranc_id && !max_flushed_seq_.compare_exchange_weak(cur, tranc_id)) {}
+    while (cur < tranc_id && !max_flushed_seq_.compare_exchange_weak(cur, tranc_id)) {
+    }
     // 恢复 WAL 阶段 wal 尚未初始化，此时只需要更新内存中的 max_flushed_seq_，
     // 后续 init_new_wal() 会用该值创建新的 WAL。
     if (wal) {
@@ -327,10 +317,7 @@ void TranManager::update_max_flushed_seq(uint64_t tranc_id){
     }
 }
 
-uint64_t TranManager::get_global_seq(){
-    return global_seq_.load();
-}
-
+uint64_t TranManager::get_global_seq() { return global_seq_.load(); }
 
 // 事务id计数器+1
 uint64_t TranManager::get_next_global_seq() {
@@ -338,15 +325,22 @@ uint64_t TranManager::get_next_global_seq() {
     return ++global_seq_;
 }
 
-uint64_t TranManager::get_max_flushed_seq(){
-    return max_flushed_seq_.load();
+// 将全局 id 抬升到不小于 max_seen_id。
+// 用于 WAL 恢复重放：tranc_info_file 中的 global_seq_ 可能落后于
+// 已重放的 committed_seq，若不抬升，后续提交会复用已重放的版本号，
+// 导致同一 key 出现两个相同 id 的版本，破坏可见性判断。
+void TranManager::bump_global_seq(uint64_t max_seen_id) {
+    uint64_t cur = global_seq_.load();
+    while (cur < max_seen_id && !global_seq_.compare_exchange_weak(cur, max_seen_id)) {
+    }
 }
+
+uint64_t TranManager::get_max_flushed_seq() { return max_flushed_seq_.load(); }
 // std::set<uint64_t>& TranManager::get_flushed_tranc_ids() {
 //     return flushedTrancIds_;
 // }
 
-std::shared_ptr<TranContext> TranManager::new_tranc(
-    const IsolationLevel& isolation_level) {
+std::shared_ptr<TranContext> TranManager::new_tranc(const IsolationLevel& isolation_level) {
     // TODO: 创建新事务（初始化事务上下文）
     spdlog::debug(
         "TranManager--new_tranc(): Creating new transaction with "
@@ -357,10 +351,9 @@ std::shared_ptr<TranContext> TranManager::new_tranc(
     std::unique_lock<std::mutex> lock(mutex_);
     // 获得事务id，并创建事务上下文对象
     // auto tranc_id = get_next_global_seq();
-    auto tranc_id = get_global_seq();//修改为事务创建时，不做id的自增
+    auto tranc_id = get_global_seq();  // 修改为事务创建时，不做id的自增
 
-    auto new_trancontext = std::make_shared<TranContext>(
-        tranc_id, engine_, shared_from_this(), isolation_level);
+    auto new_trancontext = std::make_shared<TranContext>(tranc_id, engine_, shared_from_this(), isolation_level);
 
     spdlog::debug(
         "TranManager--new_tranc(): Created transaction ID={} with "
@@ -374,25 +367,22 @@ std::string TranManager::get_tranc_info_file_path() {
     if (data_dir_.empty()) {
         data_dir_ = "./";
     }
-    return data_dir_ + "/tranc_id";
+    return data_dir_ + "/tranc_info_file";
 }
 
 std::map<uint64_t, std::vector<Record>> TranManager::check_recover() {
     spdlog::info("TranManager--check_recover(): Starting recovery from WAL");
     // 通过Wal的static方法，先获取所有大于最大已落盘id的事务
     auto wal_records = WAL::recover(data_dir_, max_flushed_seq_);
-    
-    spdlog::info("TranManager--check_recover(): Recovered {} transactions",
-                 wal_records.size());
+
+    spdlog::info("TranManager--check_recover(): Recovered {} transactions", wal_records.size());
     return wal_records;
 }
 
-
 // 将Record集合operations写入wal中，并将wal文件落盘
 bool TranManager::write_to_wal(const std::vector<Record>& records) {
-    spdlog::trace("TranManager--write_to_wal(): Writing {} records to WAL",
-                  records.size());
-    try {  
+    spdlog::trace("TranManager--write_to_wal(): Writing {} records to WAL", records.size());
+    try {
         // 将Records数组写入wal中，并刷入wal文件
         wal->log(records, true);
     } catch (const std::exception& e) {
@@ -400,9 +390,7 @@ bool TranManager::write_to_wal(const std::vector<Record>& records) {
         return false;
     }
 
-    spdlog::trace(
-        "TranManager--write_to_wal(): Successfully wrote {} records to WAL",
-        records.size());
+    spdlog::trace("TranManager--write_to_wal(): Successfully wrote {} records to WAL", records.size());
 
     return true;
 }

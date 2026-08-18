@@ -22,6 +22,7 @@ WAL::WAL(const std::string& log_dir, size_t buffer_size,
     // ? 3. 启动清理线程: cleaner_thread_ = std::thread(&WAL::cleaner, this)
     std::unique_lock<std::mutex> lock(mutex_); 
     uint64_t max_tag = 0;
+    bool found_wal = false;
     if (!std::filesystem::exists(log_dir)) {
         std::filesystem::create_directories(log_dir);
     }
@@ -33,26 +34,27 @@ WAL::WAL(const std::string& log_dir, size_t buffer_size,
         if (!entry.is_regular_file()) continue;
         // 如果不是已wal.为前缀的文件
         std::string filename = entry.path().filename().string();
-        if (filename.size() < 4 || filename.substr(0, 4) != "wal.") continue;
+        if (filename.size() < 4 || filename.substr(0, 4) != "wal.") 
+            continue;
         // 从索引4开始取子串
         auto tag = std::stoull(filename.substr(4));
         if (tag > max_tag) { 
             max_tag = tag; 
         }
+        found_wal = true;
     }
-    // 打开最大序号的wal，没有则新建wal.0
-    active_log_path_ = log_dir + "/wal." + std::to_string(max_tag);
 
-    // // !这里使用截断的方式似乎不太合理
-    log_file_ = FileObj::open(active_log_path_, true);
-    // if(std::filesystem::exists(active_log_path_)){
-    //     log_file_ = FileObj::open(active_log_path_,false);
-    // }else{
-    //     log_file_ = FileObj::open(active_log_path_,true);
-    // }
-    if (log_file_.size() > file_size_limit_) {
-        reset_file();  // 创建 wal.(max_tag+1)
+    // 每次启动都新建一个 WAL 文件（wal.(最大序号+1)，无文件则 wal.0）。
+    // 旧文件原样保留且不再追加，即使其尾部有崩溃残留的残缺记录，
+    // 也不会影响后续新记录的写入与恢复。
+    uint64_t new_tag = found_wal ? max_tag + 1 : 0;
+    active_log_path_ = log_dir + "/wal." + std::to_string(new_tag);
+    if (std::filesystem::exists(active_log_path_)) {
+        log_file_ = FileObj::open(active_log_path_, false);
+    } else {
+        log_file_ = FileObj::open(active_log_path_, true);
     }
+
     // 开启一个后台清理线程，执行本对象中的cleaner函数
     cleaner_thread_ = std::thread(&WAL::cleaner, this);
 }
@@ -78,8 +80,7 @@ WAL::~WAL() {
     log_file_.close(); // 显式关闭文件
 }
 
-std::map<uint64_t, std::vector<Record>> WAL::recover(
-    const std::string& log_dir, uint64_t max_flushed_seq) {
+std::map<uint64_t, std::vector<Record>> WAL::recover(const std::string &log_dir, uint64_t max_flushed_seq) {
     // TODO: 检查需要重放的WAL日志
     // ? 1. 若 log_dir 不存在则直接返回空 map
     // ? 2. 遍历目录找到所有 "wal." 前缀的文件
@@ -116,7 +117,9 @@ std::map<uint64_t, std::vector<Record>> WAL::recover(
     // 读取所有的记录
     for (const auto &wal_path : wal_paths) {
         auto wal_file = FileObj::open(wal_path, false);
+        // 读取整个wal_file中的二进制数据
         auto wal_records_slice = wal_file.read_to_slice(0, wal_file.size());
+        // 将二进制数据解析为Record对象数组
         auto records = Record::decode(wal_records_slice);
         for (const auto &record : records) {
             // Record的tranc_id 大于 max_flushed_seq, 才需要尝试恢复
@@ -168,7 +171,7 @@ void WAL::log(const std::vector<Record>& records, bool force_flush) {
     }
     if (!log_file_.sync()) {
         // 确保WAL日志立即写入磁盘
-        throw std::runtime_error("Failed to sync WAL file");
+        throw std::runtime_error("Failed to sync WAL file"); 
     }
     auto cur_file_size = log_file_.size();
     // WAL日志文件大小超过预设，则新建一个新的WAL日志
@@ -223,34 +226,36 @@ void WAL::cleanWALFile() {
     }
 
     // 按照seq升序排序
-    std::sort(wal_paths.begin(), wal_paths.end(),
-              [](const std::pair<size_t, std::string>& a,
-                 const std::pair<size_t, std::string>& b) {
-                  return a.first < b.first;
-              });
+    // std::sort(wal_paths.begin(), wal_paths.end(),
+    //           [](const std::pair<size_t, std::string>& a,
+    //              const std::pair<size_t, std::string>& b) {
+    //               return a.first < b.first;
+    //           });
 
     // 判断是否可以删除
     std::vector<FileObj> del_paths;
-    for (int idx = 0; idx < wal_paths.size() - 1; idx++) {
+    for (size_t idx = 0; idx < wal_paths.size(); ++idx) {
         auto cur_path = wal_paths[idx].second;
         auto cur_file = FileObj::open(cur_path, false);
         // 遍历文件记录, 读取所有的tranc_id,
         // 判断是否都小于等于max_flushed_seq_
         size_t offset = 0;
-        bool has_unfinished = false;
+        bool has_unflushed = false;
+        // todo:这里遍历的方式较低效，后续可以改为在WAL文件头部设置元数据，记录本WAL中的最大commited_seq
         while (offset + sizeof(uint16_t) < cur_file.size()) {
             uint16_t record_size = cur_file.read_uint16(offset);
             uint64_t tranc_id = cur_file.read_uint64(offset + sizeof(uint16_t));
             if (tranc_id > max_flushed_seq_) {
-                has_unfinished = true;
+                has_unflushed = true;
                 break;
             }
             offset += record_size;
         }
-        if (!has_unfinished) {
+        if (!has_unflushed) {
             del_paths.push_back(std::move(cur_file));
         }
     }
+
     // 在上述扫描结束后，进行删除过时的Wal
     for (auto& del_file : del_paths) {
         del_file.del_file();

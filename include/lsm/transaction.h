@@ -54,8 +54,8 @@ public:
     std::weak_ptr<TranManager> tranManager_; // 事务管理器的指针
     uint64_t tranc_id_; //事务id
     std::vector<Record> operations; // 事务操作Record数组, 也就是后续转化为WAL日志的内容
-    // temp_map_:事务执行过程中还未提交的数据, 例如事务中的put操作的k-v数据暂存到这里，等到后续写入memtable
-    std::unordered_map<std::string, std::string> temp_map_; 
+    // wirte_map_:事务执行过程中还未提交的数据, 例如事务中的put操作的k-v数据暂存到这里，等到后续写入memtable
+    std::unordered_map<std::string, std::string> wirte_map_; 
     bool isCommited = false;
     bool isAborted = false;
     enum IsolationLevel isolation_level_;
@@ -76,6 +76,8 @@ public:
     uint64_t get_global_seq();
     uint64_t get_next_global_seq();
     uint64_t get_max_flushed_seq();
+    // 将全局 id 抬升到不小于 max_seen_id，用于 WAL 恢复重放后避免 id 复用
+    void bump_global_seq(uint64_t max_seen_id);
 
     void update_max_flushed_seq(uint64_t tranc_id);
     // void add_ready_to_flush(uint64_t tranc_id, TransactionState state);
@@ -85,7 +87,9 @@ public:
 
     std::map<uint64_t, std::vector<Record>> check_recover();
     std::string get_tranc_info_file_path();
+    // 将global_seq_和max_flushed_seq_写入tranc_info_file文件中
     void write_tranc_info_file();
+    // 从tranc_info_file文件中读出global_seq_和max_flushed_seq_
     void read_tranc_info_file();
 
 private:

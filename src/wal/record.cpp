@@ -15,7 +15,7 @@ Record Record::createRecord(uint64_t tranc_id) {
 }
 
 Record Record::commitRecord(uint64_t tranc_id) {
-    // TODO: Lab 5.3 返回提交事务的Record
+    // TODO: 返回提交事务的Record
     Record record;
     record.operation_type_ = OperationType::OP_COMMIT;
     record.tranc_id_ = tranc_id;
@@ -24,7 +24,7 @@ Record Record::commitRecord(uint64_t tranc_id) {
 }
 
 Record Record::rollbackRecord(uint64_t tranc_id) {
-    // TODO: Lab 5.3 返回回滚事务的Record
+    // TODO: 返回回滚事务的Record
     Record record;
     record.operation_type_ = OperationType::OP_ROLLBACK;
     record.tranc_id_ = tranc_id;
@@ -32,35 +32,31 @@ Record Record::rollbackRecord(uint64_t tranc_id) {
     return record;
 }
 
-Record Record::putRecord(uint64_t tranc_id, const std::string& key,
-                         const std::string& value) {
-    // TODO: Lab 5.3 返回插入键值对的Record
+Record Record::putRecord(uint64_t tranc_id, const std::string& key, const std::string& value) {
+    // TODO: 返回插入键值对的Record
     Record record;
     record.operation_type_ = OperationType::OP_PUT;
     record.tranc_id_ = tranc_id;
     record.key_ = key;
     record.value_ = value;
-    record.record_len_ = sizeof(uint16_t) + sizeof(uint64_t) + sizeof(uint8_t) +
-                         sizeof(uint16_t) + key.size() + sizeof(uint16_t) +
-                         value.size();
+    record.record_len_ = sizeof(uint16_t) + sizeof(uint64_t) + sizeof(uint8_t) + sizeof(uint16_t) + key.size() +
+                         sizeof(uint16_t) + value.size();
     return record;
 }
 Record Record::deleteRecord(uint64_t tranc_id, const std::string& key) {
-    // TODO: Lab 5.3 返回删除键值对的Record
+    // TODO: 返回删除键值对的Record
     Record record;
     record.operation_type_ = OperationType::OP_DELETE;
     record.tranc_id_ = tranc_id;
     record.key_ = key;
-    record.record_len_ = sizeof(uint16_t) + sizeof(uint64_t) + sizeof(uint8_t) +
-                         sizeof(uint16_t) + key.size();
+    record.record_len_ = sizeof(uint16_t) + sizeof(uint64_t) + sizeof(uint8_t) + sizeof(uint16_t) + key.size();
     return record;
 }
 
-
 std::vector<uint8_t> Record::encode() const {
-    // TODO: Lab 5.3 实现Record的编码函数，将单个Record编码成字节流
+    // TODO: 实现Record的编码函数，将单个Record编码成字节流
     // 编码格式
-    // | record_len 16b| tranc_id 64b| operation_type 8b| key_len(optional) 16b| 
+    // | record_len 16b| tranc_id 64b| operation_type 8b| key_len(optional) 16b|
     // key(optional) | value_len(optional) 16b| value(optional) |
     std::vector<uint8_t> record;
 
@@ -78,35 +74,31 @@ std::vector<uint8_t> Record::encode() const {
 
     // 编码 operation_type
     auto type_byte = static_cast<uint8_t>(operation_type_);
-    std::memcpy(record.data() + sizeof(uint16_t) + sizeof(uint64_t), &type_byte,
-                sizeof(uint8_t));
+    std::memcpy(record.data() + sizeof(uint16_t) + sizeof(uint64_t), &type_byte, sizeof(uint8_t));
 
     // 插入操作有key和value
     if (this->operation_type_ == OperationType::OP_PUT) {
         uint16_t key_len = key_.size();
         std::memcpy(record.data() + key_offset, &key_len, sizeof(uint16_t));
-        std::memcpy(record.data() + key_offset + sizeof(uint16_t), key_.data(),
-                    key_.size());
+        std::memcpy(record.data() + key_offset + sizeof(uint16_t), key_.data(), key_.size());
 
         size_t value_offset = key_offset + sizeof(uint16_t) + key_.size();
 
         uint16_t value_len = value_.size();
         std::memcpy(record.data() + value_offset, &value_len, sizeof(uint16_t));
-        std::memcpy(record.data() + value_offset + sizeof(uint16_t),
-                    value_.data(), value_.size());
+        std::memcpy(record.data() + value_offset + sizeof(uint16_t), value_.data(), value_.size());
     } else if (this->operation_type_ == OperationType::OP_DELETE) {
         // 删除操作只需要存储key
         uint16_t key_len = key_.size();
         std::memcpy(record.data() + key_offset, &key_len, sizeof(uint16_t));
-        std::memcpy(record.data() + key_offset + sizeof(uint16_t), key_.data(),
-                    key_.size());
+        std::memcpy(record.data() + key_offset + sizeof(uint16_t), key_.data(), key_.size());
     }
 
     return record;
 }
 
 std::vector<Record> Record::decode(const std::vector<uint8_t>& data) {
-    // TODO: Lab 5.3 实现Record的解码函数，将记录二进制data数组解码成Record数组
+    // TODO: 实现Record的解码函数，将记录二进制data数组解码成Record数组
     if (data.size() < sizeof(uint16_t) + sizeof(uint64_t) + sizeof(uint8_t)) {
         return {};
     }
@@ -115,15 +107,22 @@ std::vector<Record> Record::decode(const std::vector<uint8_t>& data) {
     size_t pos = 0;
 
     while (pos < data.size()) {
+        // 头部(record_len 2字节)不完整：崩溃时写入中断留下的尾部，直接丢弃
+        if (data.size() - pos < sizeof(uint16_t)) {
+            break;
+        }
+
         // 读取 record_len
         uint16_t record_len;
         std::memcpy(&record_len, data.data() + pos, sizeof(uint16_t));
         pos += sizeof(uint16_t);
 
-        // 检查数据长度是否足够
-        if (data.size() < record_len) {
-            throw std::runtime_error(
-                "Data length does not match record length");
+        // record_len 包含 2 字节长度头，最小合法长度 = 2(头)+8(tranc_id)+1(op)
+        constexpr size_t kMinRecordLen = sizeof(uint16_t) + sizeof(uint64_t) + sizeof(uint8_t);
+        // 声明长度非法，或剩余字节不足一条完整记录：
+        // 视为崩溃时未写完的尾部记录，丢弃而非抛异常
+        if (record_len < kMinRecordLen || data.size() - pos < record_len - sizeof(uint16_t)) {
+            break;
         }
 
         // 读取 tranc_id
@@ -147,8 +146,7 @@ std::vector<Record> Record::decode(const std::vector<uint8_t>& data) {
             pos += sizeof(uint16_t);
 
             // 读取 key
-            record.key_ = std::string(
-                reinterpret_cast<const char*>(data.data() + pos), key_len);
+            record.key_ = std::string(reinterpret_cast<const char*>(data.data() + pos), key_len);
             pos += key_len;
 
             // 读取 value_len
@@ -157,8 +155,7 @@ std::vector<Record> Record::decode(const std::vector<uint8_t>& data) {
             pos += sizeof(uint16_t);
 
             // 读取 value
-            record.value_ = std::string(
-                reinterpret_cast<const char*>(data.data() + pos), value_len);
+            record.value_ = std::string(reinterpret_cast<const char*>(data.data() + pos), value_len);
             pos += value_len;
         } else if (operation_type == OperationType::OP_DELETE) {
             // 读取 key_len
@@ -167,9 +164,10 @@ std::vector<Record> Record::decode(const std::vector<uint8_t>& data) {
             pos += sizeof(uint16_t);
 
             // 读取 key
-            record.key_ = std::string(
-                reinterpret_cast<const char*>(data.data() + pos), key_len);
+            record.key_ = std::string(reinterpret_cast<const char*>(data.data() + pos), key_len);
             pos += key_len;
+        }else if(operation_type == OperationType::OP_COMMIT){
+            // 这是一个完整事务的结尾
         }
 
         records.push_back(record);
@@ -177,20 +175,17 @@ std::vector<Record> Record::decode(const std::vector<uint8_t>& data) {
     return records;
 }
 void Record::print() const {
-    std::cout << "Record: tranc_id=" << tranc_id_
-              << ", operation_type=" << static_cast<int>(operation_type_)
+    std::cout << "Record: tranc_id=" << tranc_id_ << ", operation_type=" << static_cast<int>(operation_type_)
               << ", key=" << key_ << ", value=" << value_ << std::endl;
 }
 
 bool Record::operator==(const Record& other) const {
-    if (tranc_id_ != other.tranc_id_ ||
-        operation_type_ != other.operation_type_) {
+    if (tranc_id_ != other.tranc_id_ || operation_type_ != other.operation_type_) {
         return false;
     }
 
     // 不需要 key 和 value 比较的情况
-    if (operation_type_ == OperationType::OP_CREATE ||
-        operation_type_ == OperationType::OP_COMMIT ||
+    if (operation_type_ == OperationType::OP_CREATE || operation_type_ == OperationType::OP_COMMIT ||
         operation_type_ == OperationType::OP_ROLLBACK) {
         return true;
     }
