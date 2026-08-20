@@ -389,6 +389,10 @@ std::shared_ptr<SST> SSTBuilder::build(size_t sst_id, const std::string& path,
     // ?    WiscKey 额外: [storage_mode_:uint8][WISCKEY_MAGIC:uint8]
     // ? 6. 调用 FileObj::create_and_write 写文件
     // ? 7. 构造并返回 SST 对象（记录上述过程的一些关键信息作为SST中的控制信息）
+    // 先将vlog持久化
+    if(vlog_){
+        vlog_->sync();
+    }
 
     // 收尾工作：将最后一个装有数据的block放入编码的二进制data数组中
     if (!block.is_empty()) {

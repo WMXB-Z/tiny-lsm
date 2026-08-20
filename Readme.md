@@ -1,3 +1,4 @@
+[interpretation.md](interpretation.md)
 
 ## 📦 Build Configuration
 
@@ -24,9 +25,9 @@ xmake project -k compile_commands
 xmake install --root lsm_shared
 ```
 
-# 🛠️ Usage
+## 🛠️ Usage
 
-## Use as a library
+### Use as a library
 
 Here is a simple example demonstrating how to use the LSM Tree for basic key-value operations:
 
@@ -95,9 +96,12 @@ int main() {
 }
 ```
 
+
+## 🔥 Performance Testing 
 ```bash
 xmake run server
 ```
 
 ```bash
-(base) ➜  ~ redis-benchmark -h 127.0.0.1 -p 6379 -c 100 -n 100000 -q -t SET,GET,INCR,SADD,HSET,ZADD
+redis-benchmark -h 127.0.0.1 -p 6379 -c 100 -n 100000 -q -t SET,GET,INCR,SADD,HSET,ZADD
+```

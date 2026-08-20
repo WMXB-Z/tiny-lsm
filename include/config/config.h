@@ -85,5 +85,8 @@ public:
   void modify_lsm_tol_mem_size_limit(long long one);
   void modify_lsm_per_mem_size_limit(long long one);
   void modify_lsm_block_size(int one);
+  void modify_lsm_block_cache_capacity(int one);
+  void modify_lsm_block_cache_k(int one);
+  void modify_wisckey_value_threshold(size_t threshold);
 };
 } // namespace tiny_lsm

@@ -46,6 +46,18 @@ void TomlConfig::modify_lsm_block_size(int one) { lsm_block_size_ = one; }
 void TomlConfig::modify_lsm_per_mem_size_limit(long long one) {
   lsm_per_mem_size_limit_ = one;
 }
+
+void TomlConfig::modify_lsm_block_cache_capacity(int one) {
+  lsm_block_cache_capacity_ = one;
+}
+
+void TomlConfig::modify_lsm_block_cache_k(int one) {
+  lsm_block_cache_k_ = one;
+}
+
+void TomlConfig::modify_wisckey_value_threshold(size_t threshold) {
+  wisckey_value_threshold_ = threshold;
+}
 //////////////////////////////////////////////////////////////////
 
 // Constructor implementation

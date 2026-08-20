@@ -28,7 +28,7 @@ static uint32_t crc32_compute(const uint8_t* data, size_t len) {
 }
 
 std::shared_ptr<VLog> VLog::open(const std::string& path) {
-    // TODO: Lab 7.1 打开或创建 VLog 文件
+    // TODO: 打开或创建 VLog 文件
     // ? 1. 若文件不存在则创建空文件
     // ? 2. 用 FileObj::open(path, false) 打开（不截断，保留已有记录）
     // ? 3. 记录 path_ 和 file_
@@ -52,7 +52,7 @@ std::shared_ptr<VLog> VLog::open(const std::string& path) {
 }
 
 uint64_t VLog::append(const std::string& key, const std::string& value) {
-    // TODO: Lab 7.1 追加一条 K-V 记录到 VLog，返回该k-v记录起始偏移量
+    // TODO: 追加一条 K-V 记录到 VLog，返回该k-v记录起始偏移量
     // ? 加 append_mtx_ 互斥锁（支持并发写）
     // ? offset = file_.size()（追加前的文件大小即为本次记录的起始偏移）
     // ? 记录格式: [key_len:uint16][key][val_len:uint32][value][crc32:uint32]
@@ -99,16 +99,16 @@ uint64_t VLog::append(const std::string& key, const std::string& value) {
 }
 
 std::string VLog::read_value(uint64_t offset, uint32_t value_size) {
-    // TODO: Lab 7.1 根据指定的offset定位至对应的k-v处，并读取 value
+    // TODO: 根据指定的offset定位至对应的k-v处，并读取 value
     // ? 先读 key_len (uint16_t, 2 bytes) 以跳过 key
     // ?即： value 起始位置 = offset + 2 + key_len + 4，读取 value_size 个字节返回
     // Record layout: [key_len:2B][key:key_len][val_len:4B][value:val_len][crc:4B]
-    // First read key_len to skip past the key
+    // 先读取key_len以跳过key，然后读取val_len，从而获得真正的value部分
     auto key_len_bytes = file_.read_to_slice(offset, sizeof(uint16_t));
     uint16_t key_len = 0;
     memcpy(&key_len, key_len_bytes.data(), sizeof(uint16_t));
 
-    // value starts at: offset + 2 + key_len + 4
+    // value部分的起始位置: offset + 2 + key_len + 4
     uint64_t val_offset =
         offset + sizeof(uint16_t) + key_len + sizeof(uint32_t);
 
